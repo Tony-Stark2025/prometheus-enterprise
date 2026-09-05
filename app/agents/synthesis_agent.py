@@ -7,9 +7,9 @@ Uses Gemini 3.7 Flash Reasoning Engine on Vertex AI with deterministic heuristic
 from typing import List, Dict, Any, Optional
 import json
 import logging
-from app.config import settings
-from app.memory.state_store import state_store, BlockerRecord
-from app.llm.gemini_pool import gemini_engine, gemini_pool
+from prometheus.config import settings
+from prometheus.memory.state_store import state_store, BlockerRecord
+from prometheus.llm.gemini_pool import gemini_engine, gemini_pool
 
 logger = logging.getLogger(__name__)
 

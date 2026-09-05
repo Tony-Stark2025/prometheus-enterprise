@@ -24,14 +24,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
-from app.config import settings
-from app.security.abac_guard import UserContext
-from app.memory.state_store import state_store, DraftStatus
-from app.tools.slack_tools import SlackTools
-from app.registry.agent_registry import agent_registry
-from app.mcp.server import mcp_server
-from app.workflows.prometheus_flow import PrometheusWorkflow, WorkflowExecutionResult
-from app.scheduler import scheduler
+from prometheus.config import settings
+from prometheus.security.abac_guard import UserContext
+from prometheus.memory.state_store import state_store, DraftStatus
+from prometheus.tools.slack_tools import SlackTools
+from prometheus.registry.agent_registry import agent_registry
+from prometheus.mcp.server import mcp_server
+from prometheus.workflows.prometheus_flow import PrometheusWorkflow, WorkflowExecutionResult
+from prometheus.scheduler import scheduler
 
 
 @asynccontextmanager
@@ -74,22 +74,16 @@ class ActionApprovalRequest(BaseModel):
     approver_username: str = "alex-lead"
 
 
-class ActionEditRequest(BaseModel):
-    content: str
-    target: Optional[str] = None
-    approver_username: str = "alex-lead"
-
-
-from app.memory.firestore_store import firestore_store, UserProfile
-from app.auth.oauth import create_session_token, get_google_auth_url, exchange_google_code
-from app.auth.dependencies import get_current_user_optional, UserContext as AuthUserContext
+from prometheus.memory.firestore_store import firestore_store, UserProfile
+from prometheus.auth.oauth import create_session_token, get_google_auth_url, exchange_google_code
+from prometheus.auth.dependencies import get_current_user_optional, UserContext as AuthUserContext
+from prometheus.security.abac_engine import abac_engine
 
 # ==============================================================================
 # Dashboard & Core REST API Endpoints
 # ==============================================================================
 DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), "dashboard", "dashboard.html")
 DOCUMENTATION_PATH = os.path.join(os.path.dirname(__file__), "dashboard", "documentation.html")
-BLOG_PATH = os.path.join(os.path.dirname(__file__), "..", "docs", "index.html")
 
 
 @app.get("/", response_class=HTMLResponse, tags=["Dashboard"])
@@ -114,18 +108,6 @@ async def serve_documentation():
         with open(DOCUMENTATION_PATH, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse(content="<h1>Prometheus Documentation: documentation.html not found.</h1>")
-
-
-@app.get("/blog", response_class=HTMLResponse, tags=["Documentation"])
-@app.get("/article", response_class=HTMLResponse, tags=["Documentation"])
-async def serve_blog():
-    """
-    Renders the Prometheus Engineering Blog Post Article.
-    """
-    if os.path.exists(BLOG_PATH):
-        with open(BLOG_PATH, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    return HTMLResponse(content="<h1>Prometheus Blog: docs/index.html not found.</h1>")
 
 
 # ==============================================================================
@@ -177,19 +159,45 @@ async def google_callback(code: str, response: Response):
     return HTMLResponse(content="<script>window.location.href='/dashboard';</script>")
 
 
+class DemoLoginRequest(BaseModel):
+    user_id: Optional[str] = "brightonwe30"
+
+
 @app.post("/api/v1/auth/demo-login", tags=["Authentication"])
-async def demo_login(response: Response):
+async def demo_login(response: Response, payload: Optional[DemoLoginRequest] = None):
     """
-    Provides instant one-click enterprise trial session.
+    Provides instant enterprise session for selected profile (default: Bright Onwe).
     """
-    profile = UserProfile(
-        user_id="lead-01",
-        email="alex.lead@enterprise.io",
-        name="Alex Rivera",
-        tenant_id="default_enterprise",
-        roles=["lead", "admin"],
-        org_scopes=["engineering", "platform"],
-    )
+    requested_id = payload.user_id if payload and payload.user_id else "brightonwe30"
+    
+    profiles = {
+        "brightonwe30": UserProfile(
+            user_id="brightonwe30",
+            email="brightonwe30@gmail.com",
+            name="Bright Onwe",
+            tenant_id="default_enterprise",
+            roles=["lead", "admin", "chief_of_staff"],
+            org_scopes=["engineering", "platform"],
+        ),
+        "brightbutler7": UserProfile(
+            user_id="brightbutler7",
+            email="brightbutler7@gmail.com",
+            name="Bright Butler",
+            tenant_id="default_enterprise",
+            roles=["staff_engineer", "reviewer"],
+            org_scopes=["engineering"],
+        ),
+        "sarah.chen": UserProfile(
+            user_id="sarah.chen",
+            email="sarah.chen@acme.corp",
+            name="Sarah Chen",
+            tenant_id="default_enterprise",
+            roles=["senior_engineer"],
+            org_scopes=["engineering"],
+        ),
+    }
+    
+    profile = profiles.get(requested_id, profiles["brightonwe30"])
     await firestore_store.save_user(profile)
 
     token = create_session_token(
@@ -209,6 +217,39 @@ async def logout(response: Response):
     """
     response.delete_cookie("session_token")
     return {"status": "logged_out"}
+
+
+# ==============================================================================
+# Enterprise ABAC Security Policy API
+# ==============================================================================
+@app.get("/api/v1/security/abac/users", tags=["ABAC Security"])
+async def list_abac_users():
+    """Lists registered enterprise users and their clearance attributes."""
+    return {"users": abac_engine.list_users()}
+
+
+@app.get("/api/v1/security/abac/resources", tags=["ABAC Security"])
+async def list_abac_resources():
+    """Lists registered target resources and required security bounds."""
+    return {"resources": abac_engine.list_resources()}
+
+
+class ABACEvalRequest(BaseModel):
+    user_id: str
+    resource_id: str
+
+
+@app.post("/api/v1/security/abac/evaluate", tags=["ABAC Security"])
+async def evaluate_abac_access(req: ABACEvalRequest):
+    """Evaluates dynamic Attribute-Based Access Control P(U, R) and records audit log."""
+    res = abac_engine.evaluate_access(user_id=req.user_id, resource_id=req.resource_id)
+    return res.model_dump()
+
+
+@app.get("/api/v1/security/abac/audit-logs", tags=["ABAC Security"])
+async def list_abac_audit_logs(limit: int = 50):
+    """Retrieves immutable audit evaluation logs."""
+    return {"audit_logs": abac_engine.list_audit_logs(limit=limit)}
 
 
 # ==============================================================================
@@ -341,24 +382,6 @@ async def reject_action(draft_id: str, req: ActionApprovalRequest):
     return {"status": "rejected", "draft_id": draft_id}
 
 
-@app.post("/api/v1/actions/{draft_id}/edit", tags=["Human-in-the-Loop"])
-async def edit_action(draft_id: str, req: ActionEditRequest):
-    """
-    Edits a proposed action draft content or target prior to sign-off.
-    """
-    draft = await state_store.get_draft(draft_id)
-    if not draft:
-        raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
-    if draft.status == DraftStatus.EXECUTED:
-        raise HTTPException(status_code=400, detail="Cannot edit an already executed action draft.")
-    updated = await state_store.update_draft_content(
-        draft_id=draft_id,
-        content=req.content,
-        target=req.target,
-    )
-    return {"status": "updated", "draft": updated.model_dump() if updated else None}
-
-
 # ==============================================================================
 # Model Context Protocol (MCP) Server-Sent Events (SSE) Endpoint
 # ==============================================================================
@@ -473,4 +496,4 @@ if __name__ == "__main__":
         asyncio.run(cli_runner())
     else:
         import uvicorn
-        uvicorn.run("app.main:app", host=settings.host, port=settings.port, reload=True)
+        uvicorn.run("prometheus.main:app", host=settings.host, port=settings.port, reload=True)

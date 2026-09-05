@@ -6,6 +6,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 
+from prometheus.security.vault_crypto import vault_crypto
+
 logger = logging.getLogger('prometheus.memory.firestore')
 
 class TenantIntegration(BaseModel):
@@ -28,35 +30,33 @@ class FirestoreStore:
     _instance = None
 
     def __init__(self, project_id: Optional[str] = None):
-        self.project_id = project_id or os.getenv('GCP_PROJECT_ID', 'gen-lang-client-0942141479')
+        self.project_id = project_id or os.getenv('GCP_PROJECT_ID', os.getenv('GOOGLE_CLOUD_PROJECT', 'gen-lang-client-0942141479'))
         self._db = None
-        self._memory_cache: Dict[str, Dict[str, Any]] = {
+        self._memory_cache = {
             'users': {},
             'integrations': {},
-            'blockers': {},
-            'drafts': {}
+            'tenants': {}
         }
         self._init_client()
 
     def _init_client(self):
         try:
-            if os.getenv('ENVIRONMENT') != 'testing':
-                from google.cloud import firestore
-                self._db = firestore.AsyncClient(project=self.project_id)
-                logger.info(f'Initialized Firestore Async Client for project: {self.project_id}')
+            from google.cloud import firestore
+            self._db = firestore.AsyncClient(project=self.project_id)
+            logger.info(f'Connected to Google Cloud Firestore (project: {self.project_id})')
         except Exception as e:
-            logger.warning(f'Firestore initialization fallback to in-memory store: {e}')
+            logger.warning(f'Firestore async client initialization skipped (using memory cache): {e}')
             self._db = None
 
-    async def save_user(self, user: UserProfile) -> UserProfile:
-        self._memory_cache['users'][user.user_id] = user.model_dump()
+    async def save_user(self, profile: UserProfile) -> UserProfile:
+        self._memory_cache['users'][profile.user_id] = profile.model_dump()
         if self._db:
             try:
-                doc_ref = self._db.collection('users').document(user.user_id)
-                await doc_ref.set(user.model_dump())
+                doc_ref = self._db.collection('users').document(profile.user_id)
+                await doc_ref.set(profile.model_dump())
             except Exception as e:
                 logger.warning(f'Failed to write user to Firestore: {e}')
-        return user
+        return profile
 
     async def get_user(self, user_id: str) -> Optional[UserProfile]:
         if user_id in self._memory_cache['users']:
@@ -74,7 +74,15 @@ class FirestoreStore:
         return None
 
     async def save_integration(self, tenant_id: str, service: str, config: Dict[str, Any]) -> TenantIntegration:
-        integration = TenantIntegration(service=service, enabled=True, config=config)
+        # Encrypt sensitive secret fields before saving
+        encrypted_config = {}
+        for k, v in config.items():
+            if any(s in k.lower() for s in ['token', 'secret', 'key', 'password']) and isinstance(v, str):
+                encrypted_config[k] = vault_crypto.encrypt(v)
+            else:
+                encrypted_config[k] = v
+
+        integration = TenantIntegration(service=service, enabled=True, config=encrypted_config)
         key = f'{tenant_id}:{service}'
         self._memory_cache['integrations'][key] = integration.model_dump()
 
@@ -88,20 +96,31 @@ class FirestoreStore:
 
     async def get_integration(self, tenant_id: str, service: str) -> Optional[Dict[str, Any]]:
         key = f'{tenant_id}:{service}'
+        raw_config = None
         if key in self._memory_cache['integrations']:
-            return self._memory_cache['integrations'][key].get('config')
-
-        if self._db:
+            raw_config = self._memory_cache['integrations'][key].get('config')
+        elif self._db:
             try:
                 doc_ref = self._db.collection('tenants').document(tenant_id).collection('integrations').document(service)
                 doc = await doc_ref.get()
                 if doc.exists:
                     data = doc.to_dict()
                     self._memory_cache['integrations'][key] = data
-                    return data.get('config')
+                    raw_config = data.get('config')
             except Exception as e:
                 logger.warning(f'Failed to read integration from Firestore: {e}')
-        return None
+
+        if not raw_config:
+            return None
+
+        # Decrypt sensitive secret fields before returning to tool clients
+        decrypted_config = {}
+        for k, v in raw_config.items():
+            if isinstance(v, str) and v.startswith('enc:v1:'):
+                decrypted_config[k] = vault_crypto.decrypt(v)
+            else:
+                decrypted_config[k] = v
+        return decrypted_config
 
     async def list_integrations(self, tenant_id: str) -> Dict[str, Dict[str, Any]]:
         result = {}
@@ -110,8 +129,8 @@ class FirestoreStore:
             if cfg:
                 masked = {}
                 for k, v in cfg.items():
-                    if 'token' in k.lower() or 'secret' in k.lower() or 'key' in k.lower():
-                        masked[k] = f'••••••••{str(v)[-4:]}' if len(str(v)) > 4 else '••••'
+                    if any(s in k.lower() for s in ['token', 'secret', 'key', 'password']) and isinstance(v, str):
+                        masked[k] = vault_crypto.mask_token(v)
                     else:
                         masked[k] = v
                 result[service] = {'connected': True, 'config': masked}
@@ -132,4 +151,31 @@ class FirestoreStore:
                 logger.warning(f'Failed to delete integration in Firestore: {e}')
         return True
 
+    async def get_sandbox_telemetry(self, tenant_id: str, telemetry_type: str) -> List[Dict[str, Any]]:
+        """
+        Retrieves dynamic sandbox telemetry records from Firestore or memory cache for isolated demo/testing.
+        telemetry_type: 'prs', 'issues', or 'messages'
+        """
+        cache_key = f'{tenant_id}:sandbox_{telemetry_type}'
+        if cache_key in self._memory_cache:
+            return self._memory_cache[cache_key]
+
+        if self._db:
+            try:
+                col_ref = self._db.collection('tenants').document(tenant_id).collection(f'sandbox_{telemetry_type}')
+                docs = await col_ref.get()
+                if docs:
+                    data = [d.to_dict() for d in docs]
+                    self._memory_cache[cache_key] = data
+                    return data
+            except Exception as e:
+                logger.warning(f'Failed to read sandbox telemetry from Firestore: {e}')
+
+        # Default fallback: dynamic clean enterprise data if unseeded
+        from tools.seed_firestore_sandbox import seed_tenant_sandbox
+        await seed_tenant_sandbox(tenant_id)
+        return self._memory_cache.get(cache_key, [])
+
+
 firestore_store = FirestoreStore()
+

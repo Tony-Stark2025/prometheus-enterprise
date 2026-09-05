@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Prometheus: Deployment to Gemini Enterprise Agent Platform (Agent Engine)
-# For All Things Agentic Hackathon: The Fortified Enterprise Fleet Track
+# Production Deployment Automation for Google Cloud Vertex AI & Cloud Run
 # ==============================================================================
 
 set -euo pipefail

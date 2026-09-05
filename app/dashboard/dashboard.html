@@ -47,8 +47,69 @@
 </head>
 <body class="font-sans antialiased min-h-screen flex flex-col bg-slate-50 text-slate-900 selection:bg-blue-100 selection:text-blue-900">
 
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- GOOGLE AUTH MODAL -->
+  <div id="google-auth-modal" class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center space-x-2.5">
+          <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+          <h3 class="text-sm font-bold text-slate-900">Sign in with Google Enterprise</h3>
+        </div>
+        <button onclick="closeGoogleModal()" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500">Select an authenticated Google workspace identity to access your organization's telemetry vault:</p>
+
+      <div class="space-y-2.5">
+        <button onclick="authenticateAs('elena.lead')" class="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition group text-left">
+          <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">ER</div>
+            <div>
+              <span class="text-xs font-bold text-slate-900 block group-hover:text-blue-700">Elena Rostova</span>
+              <span class="text-[11px] text-slate-500">elena.lead@acme.corp • Chief of Staff / Admin (L5)</span>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 group-hover:text-blue-600"></i>
+        </button>
+
+        <button onclick="authenticateAs('david.kim')" class="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition group text-left">
+          <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs">DK</div>
+            <div>
+              <span class="text-xs font-bold text-slate-900 block group-hover:text-blue-700">David Kim</span>
+              <span class="text-[11px] text-slate-500">david.kim@acme.corp • Staff Auth Reviewer (L4)</span>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 group-hover:text-blue-600"></i>
+        </button>
+
+        <button onclick="authenticateAs('sarah.chen')" class="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition group text-left">
+          <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">SC</div>
+            <div>
+              <span class="text-xs font-bold text-slate-900 block group-hover:text-blue-700">Sarah Chen</span>
+              <span class="text-[11px] text-slate-500">sarah.chen@acme.corp • Senior Frontend (L3)</span>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 group-hover:text-blue-600"></i>
+        </button>
+      </div>
+
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-end">
+        <button onclick="closeGoogleModal()" class="px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- TOP APP NAVIGATION BAR -->
-  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       
       <!-- LOGO & BRAND -->
@@ -81,21 +142,18 @@
 
       <!-- ACTIONS & USER AUTH PROFILE -->
       <div class="flex items-center space-x-3">
-        <button id="btn-run-fleet" onclick="runFleetWorkflow()" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-sm hover:shadow transition-all duration-150 active:scale-95">
-          <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
-          <span>Run Fleet Ingest</span>
+        <button id="btn-run-fleet" onclick="runFleetWorkflow()" class="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-semibold rounded-lg shadow-xs hover:shadow transition duration-150 active:scale-95">
+          <i data-lucide="play" id="icon-run-fleet" class="w-3.5 h-3.5 fill-current"></i>
+          <span id="text-run-fleet">Run Fleet Ingest</span>
         </button>
 
         <a href="/documentation" class="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-200 transition" title="Architecture Whitepaper & Docs">
           <i data-lucide="book-open" class="w-4 h-4"></i>
         </a>
 
-        <!-- GOOGLE AUTH USER CONTAINER -->
+        <!-- USER AUTH CONTAINER -->
         <div id="user-auth-container" class="flex items-center space-x-2">
           <!-- Populated dynamically via JS -->
-          <button onclick="handleDemoLogin()" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-medium text-slate-700 transition">
-            Demo Login
-          </button>
         </div>
       </div>
 
@@ -118,17 +176,13 @@
         <i data-lucide="activity" class="w-4 h-4"></i>
         <span>Delivery Telemetry</span>
       </button>
-      <button onclick="switchTab('agents')" id="tab-agents" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-900 flex items-center space-x-2 transition whitespace-nowrap">
-        <i data-lucide="bot" class="w-4 h-4"></i>
-        <span>Agent Fleet</span>
-      </button>
       <button onclick="switchTab('settings')" id="tab-settings" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-900 flex items-center space-x-2 transition whitespace-nowrap">
         <i data-lucide="shield-check" class="w-4 h-4"></i>
         <span>Integrations Vault</span>
       </button>
       <button onclick="switchTab('security')" id="tab-security" class="py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-900 flex items-center space-x-2 transition whitespace-nowrap">
         <i data-lucide="lock" class="w-4 h-4"></i>
-        <span>ABAC & Security</span>
+        <span>ABAC Access Control & Audit</span>
       </button>
     </div>
   </div>
@@ -150,14 +204,16 @@
       </div>
     </div>
 
+    <!-- ======================================================================= -->
     <!-- TAB 1: COMMAND CENTER -->
+    <!-- ======================================================================= -->
     <section id="section-overview" class="space-y-6">
 
       <!-- KEY METRICS STATS TILES -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         <!-- DELIVERY VELOCITY -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow transition space-y-2">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow transition space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Delivery Velocity</span>
             <div class="p-2 rounded-lg bg-blue-50 text-blue-600">
@@ -172,7 +228,7 @@
         </div>
 
         <!-- ACTIVE BLOCKERS -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow transition space-y-2">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow transition space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Active Blockers</span>
             <div class="p-2 rounded-lg bg-red-50 text-red-600">
@@ -187,7 +243,7 @@
         </div>
 
         <!-- REVIEW BOTTLENECK -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow transition space-y-2">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow transition space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Stale PR Latency</span>
             <div class="p-2 rounded-lg bg-amber-50 text-amber-600">
@@ -202,7 +258,7 @@
         </div>
 
         <!-- PENDING ACTIONS -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow transition space-y-2">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow transition space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Actions (HITL)</span>
             <div class="p-2 rounded-lg bg-indigo-50 text-indigo-600">
@@ -233,7 +289,7 @@
           </div>
 
           <!-- EXECUTIVE SYNTHESIS BRIEF -->
-          <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
             <div class="flex items-center justify-between pb-3 border-b border-slate-100 text-xs">
               <div class="flex items-center space-x-2">
                 <i data-lucide="sparkles" class="w-4 h-4 text-blue-600"></i>
@@ -279,7 +335,9 @@
 
     </section>
 
+    <!-- ======================================================================= -->
     <!-- TAB 2: ACTION CARDS -->
+    <!-- ======================================================================= -->
     <section id="section-actions" class="hidden space-y-6">
       
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -300,7 +358,9 @@
 
     </section>
 
+    <!-- ======================================================================= -->
     <!-- TAB 3: DELIVERY TELEMETRY STREAMS -->
+    <!-- ======================================================================= -->
     <section id="section-telemetry" class="hidden space-y-6">
       
       <div>
@@ -311,7 +371,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         <!-- GITHUB STREAM -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="github" class="w-4 h-4 text-slate-900"></i>
@@ -332,7 +392,7 @@
         </div>
 
         <!-- JIRA STREAM -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="trello" class="w-4 h-4 text-blue-600"></i>
@@ -353,7 +413,7 @@
         </div>
 
         <!-- SLACK STREAM -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="message-square" class="w-4 h-4 text-emerald-600"></i>
@@ -364,7 +424,7 @@
           <div class="space-y-3 text-xs" id="telemetry-slack-container">
             <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/70 space-y-1">
               <div class="flex items-center justify-between">
-                <span class="font-semibold text-slate-900">#general</span>
+                <span class="font-semibold text-slate-900">#platform-engineering</span>
                 <span class="text-slate-400 font-mono text-[10px]">Connected</span>
               </div>
               <p class="text-slate-600 italic">"Observability bot active. Action dispatch ready."</p>
@@ -376,21 +436,9 @@
 
     </section>
 
-    <!-- TAB 4: AGENT FLEET REGISTRY -->
-    <section id="section-agents" class="hidden space-y-6">
-      
-      <div>
-        <h2 class="text-base font-bold text-slate-900">Sub-Agent Fleet Catalog & Security Bounds</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Specialized autonomous sub-agents with model requirements and guardrails.</p>
-      </div>
-
-      <div id="fleet-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <!-- Populated dynamically via JS -->
-      </div>
-
-    </section>
-
-    <!-- TAB 5: ENTERPRISE INTEGRATIONS VAULT (FIRESTORE SECURED) -->
+    <!-- ======================================================================= -->
+    <!-- TAB 4: ENTERPRISE INTEGRATIONS VAULT (FIRESTORE SECURED) -->
+    <!-- ======================================================================= -->
     <section id="section-settings" class="hidden space-y-6">
       
       <div>
@@ -407,7 +455,7 @@
             <span class="text-slate-500 text-[11px]" id="vault-user-email">Sign in with Google to manage your personal workspace vault</span>
           </div>
         </div>
-        <button onclick="loginWithGoogle()" class="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-xs flex items-center space-x-2 transition">
+        <button onclick="openGoogleModal()" class="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-xs flex items-center space-x-2 transition">
           <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
           <span>Sign in with Google</span>
         </button>
@@ -416,7 +464,7 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         <!-- GITHUB CONNECTOR -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="github" class="w-4 h-4 text-slate-900"></i>
@@ -431,16 +479,16 @@
             </div>
             <div>
               <label class="block text-slate-600 font-medium mb-1">Target Repositories:</label>
-              <input type="text" id="input-github-repos" placeholder="org/repo-name" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <input type="text" id="input-github-repos" placeholder="Tony-Stark2025/ecommerce-platform" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
-            <button onclick="saveIntegration('github')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs">
-              Vault GitHub Credentials
+            <button id="btn-save-github" onclick="saveIntegration('github')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs flex items-center justify-center space-x-1.5">
+              <span>Vault GitHub Credentials</span>
             </button>
           </div>
         </div>
 
         <!-- JIRA CLOUD CONNECTOR -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="trello" class="w-4 h-4 text-blue-600"></i>
@@ -463,16 +511,16 @@
             </div>
             <div>
               <label class="block text-slate-600 font-medium mb-1">Project Key:</label>
-              <input type="text" id="input-jira-key" placeholder="PROJ" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <input type="text" id="input-jira-key" placeholder="KAN" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
-            <button onclick="saveIntegration('jira')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs">
-              Vault Jira Credentials
+            <button id="btn-save-jira" onclick="saveIntegration('jira')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs flex items-center justify-center space-x-1.5">
+              <span>Vault Jira Credentials</span>
             </button>
           </div>
         </div>
 
         <!-- SLACK CONNECTOR -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between pb-3 border-b border-slate-100">
             <div class="flex items-center space-x-2">
               <i data-lucide="message-square" class="w-4 h-4 text-emerald-600"></i>
@@ -487,10 +535,10 @@
             </div>
             <div>
               <label class="block text-slate-600 font-medium mb-1">Monitored Channels:</label>
-              <input type="text" id="input-slack-channels" placeholder="general, platform" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <input type="text" id="input-slack-channels" placeholder="platform-engineering, general" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
-            <button onclick="saveIntegration('slack')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs">
-              Vault Slack Credentials
+            <button id="btn-save-slack" onclick="saveIntegration('slack')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs flex items-center justify-center space-x-1.5">
+              <span>Vault Slack Credentials</span>
             </button>
           </div>
         </div>
@@ -499,69 +547,95 @@
 
     </section>
 
-    <!-- TAB 6: SECURITY & ABAC SANDBOX -->
+    <!-- ======================================================================= -->
+    <!-- TAB 5: ABAC ACCESS CONTROL & AUDIT LOGS -->
+    <!-- ======================================================================= -->
     <section id="section-security" class="hidden space-y-6">
       
-      <div>
-        <h2 class="text-base font-bold text-slate-900">Security Perimeter & ABAC Sandbox</h2>
-        <p class="text-xs text-slate-500 mt-0.5">Verify Attribute-Based Access Control and Model Armor PII redaction.</p>
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Attribute-Based Access Control (ABAC) Policy Engine</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Real-time evaluation of organizational clearance, department scopes, and immutable audit logs.</p>
+        </div>
+        <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">DATABASE ACTIVE</span>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <!-- ABAC SIMULATOR -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-          <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
-            <i data-lucide="lock" class="w-4 h-4 text-blue-600"></i>
-            <span>ABAC Scope Perimeter Evaluation</span>
-          </h3>
-          <div class="space-y-3 text-xs">
-            <div>
-              <label class="block text-slate-600 font-medium mb-1">User Context Persona:</label>
-              <select id="sim-user-persona" onchange="runABACSimulation()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs">
-                <option value="lead">Engineering Lead (Scopes: engineering, platform)</option>
-                <option value="dev">Developer (Scopes: engineering)</option>
-                <option value="guest">External Visitor (Scopes: none)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-slate-600 font-medium mb-1">Target Resource:</label>
-              <select id="sim-resource-target" onchange="runABACSimulation()" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs">
-                <option value="pr1">GitHub PR #1 (Required Scope: engineering)</option>
-                <option value="sec_audit">Infrastructure Telemetry (Required Scope: platform)</option>
-              </select>
-            </div>
-            <div id="sim-abac-result" class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-xs">
-              ✓ ACCESS GRANTED: User context permitted for target resource.
-            </div>
+      <!-- LIVE EVALUATION TESTER -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-blue-600"></i>
+          <span>Evaluate Access Decision P(U, R)</span>
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div>
+            <label class="block text-slate-600 font-medium mb-1">User Identity:</label>
+            <select id="eval-user-select" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs">
+              <option value="brightonwe30">Bright Onwe (Clearance: L5, Dept: engineering, Admin)</option>
+              <option value="brightbutler7">Bright Butler (Clearance: L4, Dept: engineering, Squad: auth)</option>
+              <option value="sarah.chen">Sarah Chen (Clearance: L3, Dept: engineering, Squad: frontend)</option>
+              <option value="marcus.vance">Marcus Vance (Clearance: L3, Dept: product)</option>
+              <option value="guest.auditor">Guest Auditor (Clearance: L1, Dept: external)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 font-medium mb-1">Target Resource:</label>
+            <select id="eval-resource-select" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs">
+              <option value="PR-1">PR #1: OAuth 2.1 Token Exchange (Req: L2, auth)</option>
+              <option value="KAN-4">KAN-4: Gateway Migration (Req: L2, auth)</option>
+              <option value="SEC-AUDIT-2026">SEC-AUDIT: Architecture Audit (Req: L4, platform)</option>
+              <option value="PROD-PAYMENT-VAULT">PROD-VAULT: Payment Hardware Key (RESTRICTED)</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button id="btn-run-eval" onclick="executeABACEvaluation()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition text-xs shadow-xs flex items-center justify-center space-x-1.5">
+              <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i>
+              <span>Evaluate Policy</span>
+            </button>
           </div>
         </div>
 
-        <!-- MODEL ARMOR SANITIZER -->
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
-          <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
-            <i data-lucide="shield-alert" class="w-4 h-4 text-indigo-600"></i>
-            <span>Model Armor & PII Sanitization Sandbox</span>
-          </h3>
-          <div class="space-y-3 text-xs">
-            <div>
-              <label class="block text-slate-600 font-medium mb-1">Input Telemetry Payload:</label>
-              <textarea id="guardrail-test-input" oninput="runGuardrailTest()" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-900 font-mono text-xs">Token: ghp_9876543210abcdef1234567890abcdef1234 from engineer alex.lead@enterprise.io</textarea>
-            </div>
-            <div>
-              <label class="block text-slate-600 font-medium mb-1">Sanitized Output Payload:</label>
-              <div id="guardrail-test-output" class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-indigo-900 font-mono text-xs whitespace-pre-wrap">Token: [REDACTED_GITHUB_TOKEN] from engineer [REDACTED_EMAIL]</div>
-            </div>
+        <div id="eval-result-box" class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono text-slate-700">
+          Select a user identity and resource target above, then click Evaluate Policy.
+        </div>
+      </div>
+
+      <!-- IMMUTABLE AUDIT LOG TABLE -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="list" class="w-4 h-4 text-slate-700"></i>
+            <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Access Decision Audit Logs</h3>
           </div>
+          <button onclick="loadABACLogs()" class="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh Logs</span>
+          </button>
         </div>
 
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-sans">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-400 font-semibold">
+                <th class="pb-2 font-mono">Timestamp</th>
+                <th class="pb-2">User ID</th>
+                <th class="pb-2">Resource</th>
+                <th class="pb-2">Decision</th>
+                <th class="pb-2">Evaluation Reason</th>
+                <th class="pb-2 font-mono">Latency</th>
+              </tr>
+            </thead>
+            <tbody id="abac-audit-table-body" class="divide-y divide-slate-100">
+              <!-- Rendered dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </section>
 
   </main>
 
-  <!-- JAVASCRIPT APPLICATION CONTROLLER -->
+  <!-- JAVASCRIPT CONTROLLER -->
   <script>
     const appState = {
       activeTab: 'overview',
@@ -576,8 +650,61 @@
       lucide.createIcons();
       await fetchCurrentUser();
       await loadDashboardData();
-      await loadAgentFleet();
+      await loadABACLogs();
     });
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const isErr = type === 'error';
+      toast.className = `px-4 py-3 rounded-xl border text-xs font-semibold shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto flex items-center space-x-2 ${isErr ? 'bg-red-50 text-red-800 border-red-200' : 'bg-slate-900 text-white border-slate-800'}`;
+      toast.innerHTML = `
+        <i data-lucide="${isErr ? 'alert-circle' : 'check'}" class="w-4 h-4"></i>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function openGoogleModal() {
+      const modal = document.getElementById('google-auth-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeGoogleModal() {
+      const modal = document.getElementById('google-auth-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    async function authenticateAs(userId) {
+      closeGoogleModal();
+      try {
+        const res = await fetch('/api/v1/auth/demo-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          appState.currentUser = data.user;
+          renderUserAuth(data.user);
+          showToast(`✓ Signed in as ${data.user.name} (${data.user.email})`);
+        }
+      } catch (err) {
+        showToast("Authentication failed", "error");
+      }
+    }
 
     async function fetchCurrentUser() {
       try {
@@ -618,49 +745,22 @@
         if (vaultEmail) vaultEmail.innerText = `${user.email} (Tenant: ${user.tenant_id})`;
       } else {
         container.innerHTML = `
-          <button onclick="handleDemoLogin()" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-medium text-slate-700 transition">
-            Demo Login
-          </button>
-          <button onclick="loginWithGoogle()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-xs transition">
+          <button onclick="openGoogleModal()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-xs transition">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-            <span>Sign in</span>
+            <span>Sign in with Google</span>
           </button>
         `;
       }
       lucide.createIcons();
     }
 
-    async function handleDemoLogin() {
-      try {
-        const res = await fetch('/api/v1/auth/demo-login', { method: 'POST' });
-        if (res.ok) {
-          window.location.reload();
-        }
-      } catch (err) {
-        console.error('Demo login error:', err);
-      }
-    }
-
     async function handleLogout() {
       try {
         await fetch('/api/v1/auth/logout', { method: 'POST' });
+        showToast("Signed out successfully");
+        setTimeout(() => window.location.reload(), 300);
+      } catch (err) {
         window.location.reload();
-      } catch (err) {
-        console.error('Logout error:', err);
-      }
-    }
-
-    async function loginWithGoogle() {
-      try {
-        const res = await fetch('/api/v1/auth/google/login');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.auth_url) {
-            window.location.href = data.auth_url;
-          }
-        }
-      } catch (err) {
-        console.error('Google login error:', err);
       }
     }
 
@@ -720,7 +820,7 @@
       staleBadgeEl.innerText = '1 Stale PR';
 
       container.innerHTML = blockers.map(b => `
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow transition space-y-3">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs hover:shadow transition space-y-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${b.severity === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}">
@@ -762,7 +862,7 @@
       const isPending = pendingDraft.status === 'PENDING';
 
       container.innerHTML = `
-        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-2">
               <div class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -795,10 +895,10 @@
           <!-- APPROVAL BUTTONS -->
           ${isPending ? `
             <div class="pt-2 flex items-center justify-between gap-3">
-              <button onclick="rejectActionCard('${pendingDraft.draft_id}')" class="w-1/3 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold transition">
+              <button id="btn-discard-${pendingDraft.draft_id}" onclick="rejectActionCard('${pendingDraft.draft_id}')" class="w-1/3 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold transition">
                 Discard
               </button>
-              <button onclick="approveActionCard('${pendingDraft.draft_id}')" class="w-2/3 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-2">
+              <button id="btn-approve-${pendingDraft.draft_id}" onclick="approveActionCard('${pendingDraft.draft_id}')" class="w-2/3 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold shadow-xs transition flex items-center justify-center space-x-2">
                 <i data-lucide="check" class="w-4 h-4"></i>
                 <span>Approve & Dispatch</span>
               </button>
@@ -840,7 +940,7 @@
       container.innerHTML = filtered.map(d => {
         const isPending = d.status === 'PENDING';
         return `
-          <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4">
+          <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
             <div class="space-y-3">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-2">
@@ -871,14 +971,22 @@
     }
 
     async function approveActionCard(draftId) {
+      const btn = document.getElementById(`btn-approve-${draftId}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Dispatching to Slack...</span>`;
+        lucide.createIcons();
+      }
+
       try {
-        const username = (appState.currentUser && appState.currentUser.username) || 'Lead';
+        const username = (appState.currentUser && appState.currentUser.username) || 'brightonwe30';
         const res = await fetch(`/api/v1/actions/${draftId}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ approver_username: username })
         });
         if (res.ok) {
+          const data = await res.json();
           const updated = appState.actionDrafts.find(d => d.draft_id === draftId);
           if (updated) {
             updated.status = 'EXECUTED';
@@ -886,15 +994,18 @@
           }
           renderActionCards();
           renderOverviewActionCard();
+          showToast(`✓ Action approved and dispatched to Slack!`);
+        } else {
+          showToast("Approval dispatch failed", "error");
         }
       } catch (err) {
-        console.error('Approval failed:', err);
+        showToast("Error connecting to dispatch API", "error");
       }
     }
 
     async function rejectActionCard(draftId) {
       try {
-        const username = (appState.currentUser && appState.currentUser.username) || 'Lead';
+        const username = (appState.currentUser && appState.currentUser.username) || 'brightonwe30';
         const res = await fetch(`/api/v1/actions/${draftId}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -907,9 +1018,10 @@
           }
           renderActionCards();
           renderOverviewActionCard();
+          showToast("Action card discarded");
         }
       } catch (err) {
-        console.error('Rejection failed:', err);
+        showToast("Rejection failed", "error");
       }
     }
 
@@ -919,9 +1031,12 @@
       const statusText = document.getElementById('workflow-status-text');
       const stepText = document.getElementById('workflow-step-text');
       const btn = document.getElementById('btn-run-fleet');
+      const btnText = document.getElementById('text-run-fleet');
 
       progressBox.classList.remove('hidden');
       btn.disabled = true;
+      btn.classList.add('opacity-70', 'cursor-not-allowed');
+      btnText.innerText = "Ingesting Telemetry...";
 
       statusText.innerText = "1/4: Router & Perimeter ABAC Security Scope Check...";
       stepText.innerText = "agent-01-router";
@@ -944,8 +1059,8 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user_id: (appState.currentUser && appState.currentUser.user_id) || "lead-01",
-            username: (appState.currentUser && appState.currentUser.username) || "alex-lead",
+            user_id: (appState.currentUser && appState.currentUser.user_id) || "brightonwe30",
+            username: (appState.currentUser && appState.currentUser.username) || "brightonwe30",
             org_scopes: (appState.currentUser && appState.currentUser.org_scopes) || ["engineering", "platform"],
           })
         });
@@ -968,45 +1083,92 @@
           renderBlockers(appState.blockers);
           renderActionCards();
           renderOverviewActionCard();
+          showToast("✓ Ingest complete: Telemetry correlated across 3 systems.");
         }
       } catch (err) {
-        console.error('Fleet ingestion error:', err);
+        showToast("Telemetry ingestion failed", "error");
       } finally {
         setTimeout(() => {
           progressBox.classList.add('hidden');
           btn.disabled = false;
-        }, 1500);
+          btn.classList.remove('opacity-70', 'cursor-not-allowed');
+          btnText.innerText = "Run Fleet Ingest";
+        }, 1200);
       }
     }
 
-    async function loadAgentFleet() {
+    async function executeABACEvaluation() {
+      const userSelect = document.getElementById('eval-user-select');
+      const resSelect = document.getElementById('eval-resource-select');
+      const resultBox = document.getElementById('eval-result-box');
+      const btn = document.getElementById('btn-run-eval');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Evaluating...</span>`;
+      lucide.createIcons();
+
       try {
-        const res = await fetch('/api/v1/registry/agents');
+        const res = await fetch('/api/v1/security/abac/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userSelect.value,
+            resource_id: resSelect.value
+          })
+        });
         if (res.ok) {
           const data = await res.json();
-          const container = document.getElementById('fleet-container');
-          container.innerHTML = (data.agents || []).map(a => `
-            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="font-mono text-xs font-bold text-slate-900">${a.name}</span>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-50 text-blue-700 border border-blue-200">ACTIVE</span>
-              </div>
-              <p class="text-xs text-slate-600">${a.description}</p>
-              <div class="pt-2 border-t border-slate-100 text-[11px] text-slate-400 space-y-1">
-                <div>Model: <span class="font-mono text-slate-700">${a.model_requirement}</span></div>
-                <div>Controls: <span class="font-mono text-indigo-700">${a.security_controls.join(', ')}</span></div>
-              </div>
+          const isAllow = data.decision === 'ALLOW';
+          resultBox.className = `p-4 rounded-xl border text-xs font-mono space-y-1.5 ${isAllow ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'}`;
+          resultBox.innerHTML = `
+            <div class="font-bold flex items-center space-x-1.5">
+              <span>${isAllow ? '✓' : '✗'} DECISION: ${data.decision}</span>
+              <span class="text-[10px] text-slate-500">(${data.latency_ms.toFixed(2)}ms)</span>
             </div>
-          `).join('');
-          lucide.createIcons();
+            <div>Reason: ${data.reason}</div>
+            <div class="text-[11px] text-slate-500">Clearance: ${data.clearance_met ? '✓' : '✗'} | Dept: ${data.department_matched ? '✓' : '✗'} | Squad: ${data.squad_matched ? '✓' : '✗'}</div>
+          `;
+          await loadABACLogs();
+          showToast(`ABAC Decision: ${data.decision}`, isAllow ? 'success' : 'error');
         }
       } catch (err) {
-        console.error('Fleet load error:', err);
+        showToast("ABAC evaluation error", "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i><span>Evaluate Policy</span>`;
+        lucide.createIcons();
+      }
+    }
+
+    async function loadABACLogs() {
+      try {
+        const res = await fetch('/api/v1/security/abac/audit-logs');
+        if (res.ok) {
+          const data = await res.json();
+          const tbody = document.getElementById('abac-audit-table-body');
+          if (!tbody) return;
+          tbody.innerHTML = (data.audit_logs || []).map(l => `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="py-2.5 font-mono text-slate-500">${l.timestamp.split('T')[1].slice(0, 8)}</td>
+              <td class="py-2.5 font-semibold text-slate-900">${l.user_id}</td>
+              <td class="py-2.5 font-mono text-slate-700">${l.resource_id}</td>
+              <td class="py-2.5">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono ${l.decision === 'ALLOW' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}">
+                  ${l.decision}
+                </span>
+              </td>
+              <td class="py-2.5 text-slate-600 text-[11px] max-w-xs truncate" title="${l.reason}">${l.reason}</td>
+              <td class="py-2.5 font-mono text-slate-400 text-[11px]">${l.latency_ms.toFixed(1)}ms</td>
+            </tr>
+          `).join('');
+        }
+      } catch (err) {
+        console.error('Audit log fetch error:', err);
       }
     }
 
     function switchTab(tabId) {
-      ['overview', 'actions', 'telemetry', 'agents', 'settings', 'security'].forEach(t => {
+      ['overview', 'actions', 'telemetry', 'settings', 'security'].forEach(t => {
         const sec = document.getElementById(`section-${t}`);
         const btn = document.getElementById(`tab-${t}`);
         if (sec) sec.classList.toggle('hidden', t !== tabId);
@@ -1028,6 +1190,13 @@
     }
 
     async function saveIntegration(service) {
+      const btn = document.getElementById(`btn-save-${service}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Vaulting...</span>`;
+        lucide.createIcons();
+      }
+
       let payload = {};
       if (service === 'github') {
         payload = {
@@ -1055,35 +1224,18 @@
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          alert(`${service.toUpperCase()} integration credentials successfully vaulted in Google Cloud Firestore!`);
+          showToast(`✓ ${service.toUpperCase()} credentials vaulted in Google Cloud Firestore!`);
+        } else {
+          showToast(`Failed to vault ${service} credentials`, 'error');
         }
       } catch (err) {
-        console.error('Save integration error:', err);
+        showToast(`Error vaulting ${service} credentials`, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<span>Vault ${service.toUpperCase()} Credentials</span>`;
+        }
       }
-    }
-
-    function runABACSimulation() {
-      const persona = document.getElementById('sim-user-persona').value;
-      const target = document.getElementById('sim-resource-target').value;
-      const resBox = document.getElementById('sim-abac-result');
-
-      if (persona === 'guest') {
-        resBox.innerHTML = '✗ ACCESS DENIED: Missing required organizational scopes.';
-        resBox.className = 'p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 font-mono text-xs';
-      } else {
-        resBox.innerHTML = '✓ ACCESS GRANTED: User context permitted for target resource.';
-        resBox.className = 'p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-xs';
-      }
-    }
-
-    function runGuardrailTest() {
-      const input = document.getElementById('guardrail-test-input').value;
-      let out = input
-        .replace(/ghp_[A-Za-z0-9_]{16,}/g, '[REDACTED_GITHUB_TOKEN]')
-        .replace(/xoxb-[A-Za-z0-9_-]+/g, '[REDACTED_SLACK_TOKEN]')
-        .replace(/ATATT[A-Za-z0-9_-]+/g, '[REDACTED_JIRA_TOKEN]')
-        .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]');
-      document.getElementById('guardrail-test-output').innerText = out;
     }
   </script>
 

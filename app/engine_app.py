@@ -6,12 +6,12 @@ import asyncio
 import concurrent.futures
 from typing import Dict, Any, List, Optional
 
-from app.config import settings
-from app.workflows.prometheus_flow import PrometheusWorkflow
-from app.security.abac_guard import UserContext
-from app.memory.state_store import state_store, DraftStatus
-from app.tools.slack_tools import SlackTools
-from app.registry.agent_registry import agent_registry
+from prometheus.config import settings
+from prometheus.workflows.prometheus_flow import PrometheusWorkflow
+from prometheus.security.abac_guard import UserContext
+from prometheus.memory.state_store import state_store, DraftStatus
+from prometheus.tools.slack_tools import SlackTools
+from prometheus.registry.agent_registry import agent_registry
 
 
 def run_async(coro):
@@ -49,8 +49,8 @@ class PrometheusAgentEngineApp:
     def query(
         self,
         prompt: str = "Scan cross-squad telemetry for active sprint blockers",
-        user_id: str = "lead-01",
-        username: str = "alex-lead",
+        user_id: str = "elena.lead",
+        username: str = "elena.lead",
         org_scopes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
@@ -86,7 +86,7 @@ class PrometheusAgentEngineApp:
         """Returns the Fortified Enterprise Fleet registry of all 6 sub-agents."""
         return [a.model_dump() for a in agent_registry.list_agents()]
 
-    def approve_action(self, draft_id: str, approver_username: str = "alex-lead") -> Dict[str, Any]:
+    def approve_action(self, draft_id: str, approver_username: str = "elena.lead") -> Dict[str, Any]:
         """Human-in-the-loop action approval endpoint."""
         async def _execute():
             await state_store.init_db()

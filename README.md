@@ -1,14 +1,14 @@
 # 🔥 Prometheus: Enterprise Workstream Observability & Asynchronous Orchestration Platform
 
-[![All Things Agentic Hackathon](https://img.shields.io/badge/All_Things_Agentic_Hackathon-The_Fortified_Enterprise_Fleet-blueviolet.svg)](https://allthingsagentichackathon.devpost.com/)
+[![Enterprise Grade](https://img.shields.io/badge/Enterprise-Fleet_Observability-blueviolet.svg)]()
 [![Google GenAI SDK](https://img.shields.io/badge/Google_GenAI-Gemini_3.7_Flash-4285F4.svg)](https://ai.google.dev/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-stdio_%7C_SSE-00C7B7.svg)]()
 [![Gemini Enterprise Agent Platform](https://img.shields.io/badge/Agent_Engine-Vertex_AI-34A853.svg)](https://cloud.google.com/vertex-ai)
 [![Security](https://img.shields.io/badge/security-ABAC_%7C_Model_Armor-critical.svg)]()
 [![HITL](https://img.shields.io/badge/HITL-Propose%2C_Don't_Impose-FF6F00.svg)]()
 
-> **Submission for All Things Agentic Hackathon: The Fortified Enterprise Fleet Track**  
-> *Autonomous AI Chief of Staff correlating cross-functional engineering telemetry (GitHub, Jira, Slack, CI/CD), isolating data via ABAC/RLS, and proposing contextual remediation actions for human sign-off ("Propose, Don't Impose") on the Gemini Enterprise Agent Platform.*
+> **Autonomous AI Chief of Staff & Engineering Fleet Intelligence**  
+> *Correlating cross-functional engineering telemetry (GitHub, Jira, Slack, CI/CD), isolating data via deterministic ABAC/RLS, and proposing contextual remediation actions for human sign-off ("Propose, Don't Impose") on Google Cloud Vertex AI and Cloud Run.*
 
 ---
 

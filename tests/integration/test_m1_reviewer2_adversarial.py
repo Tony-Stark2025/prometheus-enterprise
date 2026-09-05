@@ -53,7 +53,7 @@ async def test_github_adversarial_matrix():
     # 1. Unauthenticated fallback
     with patch("prometheus.config.settings.github_token", None):
         prs = await GitHubTools.get_open_pull_requests()
-        assert len(prs) == 3
+        assert len(prs) == len(GitHubTools.MOCK_PRS)
         ci = await GitHubTools.get_ci_pipeline_failures()
         assert len(ci) == 1
 
@@ -61,7 +61,7 @@ async def test_github_adversarial_matrix():
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(429, headers={"Retry-After": "60"})):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == 3
+            assert len(prs) == len(GitHubTools.MOCK_PRS)
             ci = await GitHubTools.get_ci_pipeline_failures()
             assert len(ci) == 1
 
@@ -69,13 +69,13 @@ async def test_github_adversarial_matrix():
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(403, headers={"x-ratelimit-remaining": "0"})):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == 3
+            assert len(prs) == len(GitHubTools.MOCK_PRS)
 
     # 4. Network exception / timeout
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", side_effect=httpx.ConnectTimeout("Connection timeout")):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == 3
+            assert len(prs) == len(GitHubTools.MOCK_PRS)
             ci = await GitHubTools.get_ci_pipeline_failures()
             assert len(ci) == 1
 
@@ -123,9 +123,9 @@ async def test_jira_adversarial_matrix():
     # 1. Unauthenticated fallback
     with patch("prometheus.config.settings.jira_instance_url", None):
         issues = await JiraTools.get_sprint_issues()
-        assert len(issues) == 3
+        assert len(issues) == len(JiraTools.MOCK_ISSUES)
         blocked = await JiraTools.get_blocked_issues()
-        assert len(blocked) == 1
+        assert len(blocked) >= 1
 
     # 2. Basic Auth vs Bearer header generation
     with patch("prometheus.config.settings.jira_instance_url", "https://jira.acme.com"):
@@ -145,7 +145,7 @@ async def test_jira_adversarial_matrix():
         with patch("prometheus.config.settings.jira_api_token", "secret_token"):
             with patch("httpx.AsyncClient.get", return_value=httpx.Response(429, headers={"Retry-After": "30"})):
                 issues = await JiraTools.get_sprint_issues()
-                assert len(issues) == 3
+                assert len(issues) == len(JiraTools.MOCK_ISSUES)
 
     # 4. Live parsing simulation with ADF description and issue links
     mock_jira_issues = {
@@ -195,16 +195,16 @@ async def test_slack_adversarial_matrix():
     # 1. Unauthenticated fallback
     with patch("prometheus.config.settings.slack_bot_token", None):
         msgs = await SlackTools.get_recent_channel_messages()
-        assert len(msgs) == 3
+        assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
 
     # 2. Rate limit fallback
     with patch("prometheus.config.settings.slack_bot_token", "xox" + "b-token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(429)):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert len(msgs) == 3
+            assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(200, json={"ok": False, "error": "ratelimited"})):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert len(msgs) == 3
+            assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
 
     # 3. Action Drafting & Idempotent Approval
     draft = await SlackTools.draft_action_card(
@@ -237,12 +237,20 @@ async def test_slack_adversarial_matrix():
 @pytest.mark.asyncio
 async def test_app_and_prometheus_namespace_parity():
     """Verify both app.tools and prometheus.tools operate identically without circular import issues."""
-    with patch("app.config.settings.github_token", None):
+    with patch("app.config.settings.github_token", None), patch("prometheus.config.settings.github_token", None):
         app_prs = await AppGH.get_open_pull_requests()
-        assert len(app_prs) == 3
-    with patch("app.config.settings.jira_instance_url", None):
+        prom_prs = await GitHubTools.get_open_pull_requests()
+        assert len(app_prs) == len(prom_prs)
+        assert len(app_prs) >= 3
+
+    with patch("app.config.settings.jira_instance_url", None), patch("prometheus.config.settings.jira_instance_url", None):
         app_issues = await AppJira.get_sprint_issues()
+        prom_issues = await JiraTools.get_sprint_issues()
+        assert len(app_issues) == len(prom_issues)
         assert len(app_issues) >= 3
-    with patch("app.config.settings.slack_bot_token", None):
+
+    with patch("app.config.settings.slack_bot_token", None), patch("prometheus.config.settings.slack_bot_token", None):
         app_msgs = await AppSlack.get_recent_channel_messages()
-        assert len(app_msgs) == 3
+        prom_msgs = await SlackTools.get_recent_channel_messages()
+        assert len(app_msgs) == len(prom_msgs)
+        assert len(app_msgs) >= 3

@@ -77,6 +77,7 @@ class ActionApprovalRequest(BaseModel):
 from prometheus.memory.firestore_store import firestore_store, UserProfile
 from prometheus.auth.oauth import create_session_token, get_google_auth_url, exchange_google_code
 from prometheus.auth.dependencies import get_current_user_optional, UserContext as AuthUserContext
+from prometheus.security.abac_engine import abac_engine
 
 # ==============================================================================
 # Dashboard & Core REST API Endpoints
@@ -158,19 +159,45 @@ async def google_callback(code: str, response: Response):
     return HTMLResponse(content="<script>window.location.href='/dashboard';</script>")
 
 
+class DemoLoginRequest(BaseModel):
+    user_id: Optional[str] = "brightonwe30"
+
+
 @app.post("/api/v1/auth/demo-login", tags=["Authentication"])
-async def demo_login(response: Response):
+async def demo_login(response: Response, payload: Optional[DemoLoginRequest] = None):
     """
-    Provides instant one-click enterprise trial session.
+    Provides instant enterprise session for selected profile (default: Bright Onwe).
     """
-    profile = UserProfile(
-        user_id="lead-01",
-        email="alex.lead@enterprise.io",
-        name="Alex Rivera",
-        tenant_id="default_enterprise",
-        roles=["lead", "admin"],
-        org_scopes=["engineering", "platform"],
-    )
+    requested_id = payload.user_id if payload and payload.user_id else "brightonwe30"
+    
+    profiles = {
+        "brightonwe30": UserProfile(
+            user_id="brightonwe30",
+            email="brightonwe30@gmail.com",
+            name="Bright Onwe",
+            tenant_id="default_enterprise",
+            roles=["lead", "admin", "chief_of_staff"],
+            org_scopes=["engineering", "platform"],
+        ),
+        "brightbutler7": UserProfile(
+            user_id="brightbutler7",
+            email="brightbutler7@gmail.com",
+            name="Bright Butler",
+            tenant_id="default_enterprise",
+            roles=["staff_engineer", "reviewer"],
+            org_scopes=["engineering"],
+        ),
+        "sarah.chen": UserProfile(
+            user_id="sarah.chen",
+            email="sarah.chen@acme.corp",
+            name="Sarah Chen",
+            tenant_id="default_enterprise",
+            roles=["senior_engineer"],
+            org_scopes=["engineering"],
+        ),
+    }
+    
+    profile = profiles.get(requested_id, profiles["brightonwe30"])
     await firestore_store.save_user(profile)
 
     token = create_session_token(
@@ -190,6 +217,39 @@ async def logout(response: Response):
     """
     response.delete_cookie("session_token")
     return {"status": "logged_out"}
+
+
+# ==============================================================================
+# Enterprise ABAC Security Policy API
+# ==============================================================================
+@app.get("/api/v1/security/abac/users", tags=["ABAC Security"])
+async def list_abac_users():
+    """Lists registered enterprise users and their clearance attributes."""
+    return {"users": abac_engine.list_users()}
+
+
+@app.get("/api/v1/security/abac/resources", tags=["ABAC Security"])
+async def list_abac_resources():
+    """Lists registered target resources and required security bounds."""
+    return {"resources": abac_engine.list_resources()}
+
+
+class ABACEvalRequest(BaseModel):
+    user_id: str
+    resource_id: str
+
+
+@app.post("/api/v1/security/abac/evaluate", tags=["ABAC Security"])
+async def evaluate_abac_access(req: ABACEvalRequest):
+    """Evaluates dynamic Attribute-Based Access Control P(U, R) and records audit log."""
+    res = abac_engine.evaluate_access(user_id=req.user_id, resource_id=req.resource_id)
+    return res.model_dump()
+
+
+@app.get("/api/v1/security/abac/audit-logs", tags=["ABAC Security"])
+async def list_abac_audit_logs(limit: int = 50):
+    """Retrieves immutable audit evaluation logs."""
+    return {"audit_logs": abac_engine.list_audit_logs(limit=limit)}
 
 
 # ==============================================================================

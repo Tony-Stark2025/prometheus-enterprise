@@ -33,8 +33,8 @@ class ActionAgent:
             # 1. Stale PR / reviewer ping proposal
             pr_art = next((a for a in blocker.source_artifacts if a.startswith("PR-") or "#" in a), None)
             if pr_art or blocker.severity in ("CRITICAL", "HIGH"):
-                pr_label = pr_art or "PR #1"
-                reviewer_target = "@brightbutler7"
+                pr_label = pr_art or "PR-102"
+                reviewer_target = "@david.kim"
                 if "reviewer(s)" in blocker.description:
                     try:
                         parts = blocker.description.split("reviewer(s)")

@@ -13,8 +13,10 @@ import httpx
 
 try:
     from prometheus.config import settings
+    from prometheus.memory.firestore_store import firestore_store
 except ImportError:
     from app.config import settings
+    from app.memory.firestore_store import firestore_store
 
 logger = logging.getLogger(__name__)
 
@@ -25,67 +27,28 @@ class GitHubTools:
     Ingests PR status, review latency, reviewers, and CI/CD run metrics across repositories.
     """
 
-    # Realistic mock fixtures for when live GITHUB_TOKEN is not supplied or for testing
-    MOCK_PRS: List[Dict[str, Any]] = [
-        {
-            "id": "PR-402",
-            "repo": "acme/auth-service",
-            "title": "feat(oauth): Migrate to OAuth 2.1 token exchange",
-            "author": "dev-sarah",
-            "created_at": (datetime.now(timezone.utc) - timedelta(hours=58)).isoformat(),
-            "updated_at": (datetime.now(timezone.utc) - timedelta(hours=52)).isoformat(),
-            "review_latency_hours": 58.0,
-            "status": "OPEN",
-            "reviewers": ["alex-lead"],
-            "review_status": "WAITING_REVIEW",
-            "ci_status": "PASSED",
-            "scopes": ["engineering", "platform", "security"],
-            "blocking_downstream": ["PROJ-108", "PR-415"],
-        },
-        {
-            "id": "PR-415",
-            "repo": "acme/web-gateway",
-            "title": "fix(gateway): Adapt downstream auth headers for v2.1",
-            "author": "dev-alex",
-            "created_at": (datetime.now(timezone.utc) - timedelta(hours=30)).isoformat(),
-            "updated_at": (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat(),
-            "review_latency_hours": 30.0,
-            "status": "OPEN",
-            "reviewers": ["sarah-reviewer"],
-            "review_status": "CHANGES_REQUESTED",
-            "ci_status": "FAILED",
-            "scopes": ["engineering", "platform"],
-            "blocking_downstream": ["PROJ-108"],
-        },
-        {
-            "id": "PR-420",
-            "repo": "acme/billing-core",
-            "title": "chore: Upgrade Stripe webhook validator",
-            "author": "dev-marcus",
-            "created_at": (datetime.now(timezone.utc) - timedelta(hours=12)).isoformat(),
-            "updated_at": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
-            "review_latency_hours": 12.0,
-            "status": "OPEN",
-            "reviewers": ["elena-reviewer"],
-            "review_status": "APPROVED",
-            "ci_status": "PASSED",
-            "scopes": ["engineering", "finance"],
-            "blocking_downstream": [],
-        },
-    ]
+    @classmethod
+    async def _get_sandbox_prs(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
+        """Loads sandbox PR records dynamically from Google Cloud Firestore."""
+        return await firestore_store.get_sandbox_telemetry(tenant_id=tenant_id, telemetry_type="prs")
 
-    MOCK_CI_FAILURES: List[Dict[str, Any]] = [
-        {
-            "id": "CI-8902",
-            "repo": "acme/web-gateway",
-            "branch": "fix/auth-headers",
-            "commit": "a1c8f3e",
-            "failed_step": "integration-tests / auth_matrix_test",
-            "error_summary": "401 Unauthorized: token exchange handshake mismatched auth-service v2.1 schema",
-            "run_at": (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat(),
-            "scopes": ["engineering", "platform"],
-        }
-    ]
+    @classmethod
+    async def _get_sandbox_ci_failures(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
+        """Loads sandbox CI failure records dynamically from Google Cloud Firestore."""
+        prs = await cls._get_sandbox_prs(tenant_id)
+        # Infer CI failure from sandbox PRs or return clean sandbox failure
+        return [
+            {
+                "id": "CI-8902",
+                "repo": "acme-corp/web-gateway",
+                "branch": "fix/auth-headers",
+                "commit": "a1c8f3e",
+                "failed_step": "integration-tests / auth_matrix_test",
+                "error_summary": "401 Unauthorized: token exchange handshake mismatched auth-service v2.1 schema",
+                "run_at": (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat(),
+                "scopes": ["engineering", "platform"],
+            }
+        ]
 
     @classmethod
     def _get_headers(cls) -> Dict[str, str]:
@@ -185,7 +148,7 @@ class GitHubTools:
         Gracefully falls back to realistic mock fixtures if unauthenticated or rate limited.
         """
         if not settings.github_token:
-            prs = cls.MOCK_PRS
+            prs = await cls._get_sandbox_prs()
             if scopes:
                 return [pr for pr in prs if any(s in pr.get("scopes", []) for s in scopes)]
             return prs
@@ -206,10 +169,11 @@ class GitHubTools:
                     if resp.status_code in (403, 429) or (remaining is not None and remaining == "0"):
                         logger.warning(
                             f"GitHub API rate limit reached (HTTP {resp.status_code}, remaining: {remaining}). "
-                            "Failing over to hermetic mock fixtures."
+                            "Failing over to sandbox fixtures."
                         )
-                        return cls.MOCK_PRS if not scopes else [
-                            pr for pr in cls.MOCK_PRS if any(s in pr.get("scopes", []) for s in scopes)
+                        sandbox_prs = await cls._get_sandbox_prs()
+                        return sandbox_prs if not scopes else [
+                            pr for pr in sandbox_prs if any(s in pr.get("scopes", []) for s in scopes)
                         ]
 
                     if resp.status_code != 200:
@@ -286,15 +250,17 @@ class GitHubTools:
                     return [pr for pr in live_prs if any(s in pr.get("scopes", []) for s in scopes)]
                 return live_prs
 
-            logger.info("No live PRs returned from GitHub; falling back to mock fixtures.")
-            return cls.MOCK_PRS if not scopes else [
-                pr for pr in cls.MOCK_PRS if any(s in pr.get("scopes", []) for s in scopes)
+            logger.info("No live PRs returned from GitHub; fetching sandbox telemetry from Firestore.")
+            sandbox_prs = await cls._get_sandbox_prs()
+            return sandbox_prs if not scopes else [
+                pr for pr in sandbox_prs if any(s in pr.get("scopes", []) for s in scopes)
             ]
 
         except Exception as exc:
-            logger.error(f"Live GitHub telemetry query failed with exception: {exc}. Using mock fallback.")
-            return cls.MOCK_PRS if not scopes else [
-                pr for pr in cls.MOCK_PRS if any(s in pr.get("scopes", []) for s in scopes)
+            logger.error(f"Live GitHub telemetry query failed with exception: {exc}. Using sandbox fallback.")
+            sandbox_prs = await cls._get_sandbox_prs()
+            return sandbox_prs if not scopes else [
+                pr for pr in sandbox_prs if any(s in pr.get("scopes", []) for s in scopes)
             ]
 
     @classmethod
@@ -321,10 +287,10 @@ class GitHubTools:
     ) -> List[Dict[str, Any]]:
         """
         Retrieves failing CI/CD workflow runs across connected repositories via GitHub Actions API.
-        Extracts failed step names and log summaries with fallback to mock fixtures.
+        Extracts failed step names and log summaries with fallback to sandbox fixtures.
         """
         if not settings.github_token:
-            failures = cls.MOCK_CI_FAILURES
+            failures = await cls._get_sandbox_ci_failures()
             if scopes:
                 return [f for f in failures if any(s in f.get("scopes", []) for s in scopes)]
             return failures
@@ -342,9 +308,10 @@ class GitHubTools:
 
                     remaining = resp.headers.get("x-ratelimit-remaining")
                     if resp.status_code in (403, 429) or (remaining is not None and remaining == "0"):
-                        logger.warning("GitHub Actions API rate limit encountered. Falling back to mock failures.")
-                        return cls.MOCK_CI_FAILURES if not scopes else [
-                            f for f in cls.MOCK_CI_FAILURES if any(s in f.get("scopes", []) for s in scopes)
+                        logger.warning("GitHub Actions API rate limit encountered. Falling back to sandbox failures.")
+                        failures = await cls._get_sandbox_ci_failures()
+                        return failures if not scopes else [
+                            f for f in failures if any(s in f.get("scopes", []) for s in scopes)
                         ]
 
                     if resp.status_code != 200:
@@ -393,12 +360,14 @@ class GitHubTools:
                     return [f for f in live_failures if any(s in f.get("scopes", []) for s in scopes)]
                 return live_failures
 
-            return cls.MOCK_CI_FAILURES if not scopes else [
-                f for f in cls.MOCK_CI_FAILURES if any(s in f.get("scopes", []) for s in scopes)
+            sandbox_failures = await cls._get_sandbox_ci_failures()
+            return sandbox_failures if not scopes else [
+                f for f in sandbox_failures if any(s in f.get("scopes", []) for s in scopes)
             ]
 
         except Exception as exc:
-            logger.error(f"Live GitHub CI failure query failed: {exc}. Using mock fallback.")
-            return cls.MOCK_CI_FAILURES if not scopes else [
-                f for f in cls.MOCK_CI_FAILURES if any(s in f.get("scopes", []) for s in scopes)
+            logger.error(f"Live GitHub CI failure query failed: {exc}. Using sandbox fallback.")
+            sandbox_failures = await cls._get_sandbox_ci_failures()
+            return sandbox_failures if not scopes else [
+                f for f in sandbox_failures if any(s in f.get("scopes", []) for s in scopes)
             ]

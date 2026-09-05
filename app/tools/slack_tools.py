@@ -12,11 +12,13 @@ from typing import List, Dict, Any, Optional
 import httpx
 
 try:
-    from app.config import settings
-    from app.memory.state_store import state_store, ActionDraftRecord, DraftStatus
+    from prometheus.config import settings
+    from prometheus.memory.state_store import state_store, ActionDraftRecord, DraftStatus
+    from prometheus.memory.firestore_store import firestore_store
 except ImportError:
     from app.config import settings
     from app.memory.state_store import state_store, ActionDraftRecord, DraftStatus
+    from app.memory.firestore_store import firestore_store
 
 logger = logging.getLogger(__name__)
 
@@ -27,32 +29,10 @@ class SlackTools:
     Ingests public communication context and dispatches interactive Block Kit action cards strictly upon human approval.
     """
 
-    MOCK_MESSAGES: List[Dict[str, Any]] = [
-        {
-            "id": "MSG-901",
-            "channel": "#platform-engineering",
-            "user": "dev-sarah",
-            "timestamp": (datetime.now(timezone.utc) - timedelta(hours=36)).isoformat(),
-            "text": "Hey @alex-lead, PR #402 (OAuth 2.1) has been waiting for review since Tuesday. It's blocking the gateway integration.",
-            "scopes": ["engineering", "platform"],
-        },
-        {
-            "id": "MSG-905",
-            "channel": "#platform-engineering",
-            "user": "dev-alex",
-            "timestamp": (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat(),
-            "text": "CI failed on web-gateway branch fix/auth-headers due to 401 handshake mismatch with auth-service.",
-            "scopes": ["engineering", "platform"],
-        },
-        {
-            "id": "MSG-912",
-            "channel": "#billing-squad",
-            "user": "dev-marcus",
-            "timestamp": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(),
-            "text": "VAT fix PR #420 is approved, merging right after automated regression tests complete.",
-            "scopes": ["engineering", "finance"],
-        },
-    ]
+    @classmethod
+    async def _get_sandbox_messages(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
+        """Loads sandbox Slack messages dynamically from Google Cloud Firestore."""
+        return await firestore_store.get_sandbox_telemetry(tenant_id=tenant_id, telemetry_type="messages")
 
     _user_cache: Dict[str, str] = {}
     _channel_cache: Dict[str, str] = {}
@@ -198,7 +178,7 @@ class SlackTools:
         channel_names: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         if not settings.slack_bot_token:
-            msgs = cls.MOCK_MESSAGES
+            msgs = await cls._get_sandbox_messages()
             if scopes:
                 return [m for m in msgs if any(s in m.get("scopes", []) for s in scopes)]
             return msgs
@@ -217,9 +197,10 @@ class SlackTools:
                     resp = await client.get(url, headers=cls._get_headers())
 
                     if resp.status_code == 429:
-                        logger.warning("Slack API rate limit encountered. Falling back to mock messages.")
-                        return cls.MOCK_MESSAGES if not scopes else [
-                            m for m in cls.MOCK_MESSAGES if any(s in m.get("scopes", []) for s in scopes)
+                        logger.warning("Slack API rate limit encountered. Falling back to sandbox messages.")
+                        sandbox_msgs = await cls._get_sandbox_messages()
+                        return sandbox_msgs if not scopes else [
+                            m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
                         ]
 
                     if resp.status_code != 200:
@@ -228,8 +209,9 @@ class SlackTools:
                     data = resp.json()
                     if not data.get("ok"):
                         if data.get("error") == "ratelimited":
-                            return cls.MOCK_MESSAGES if not scopes else [
-                                m for m in cls.MOCK_MESSAGES if any(s in m.get("scopes", []) for s in scopes)
+                            sandbox_msgs = await cls._get_sandbox_messages()
+                            return sandbox_msgs if not scopes else [
+                                m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
                             ]
                         continue
 
@@ -260,8 +242,9 @@ class SlackTools:
             logger.warning(f"Live Slack ingestion encountered exception: {exc}")
 
         if not live_messages:
-            return cls.MOCK_MESSAGES if not scopes else [
-                m for m in cls.MOCK_MESSAGES if any(s in m.get("scopes", []) for s in scopes)
+            sandbox_msgs = await cls._get_sandbox_messages()
+            return sandbox_msgs if not scopes else [
+                m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
             ]
 
         if scopes:

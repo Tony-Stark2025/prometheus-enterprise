@@ -17,8 +17,8 @@ Execute the deployment of the Prometheus multi-agent fleet to Google Cloud Verte
 ### R2. End-to-End Remote Verification & Health Inspection
 Verify that the deployed remote Reasoning Engine resource is fully active and reachable by executing a remote test query. Verify all 6 sub-agents, SQLite memory persistence, and Gemini 3.7 Flash synthesis return valid correlated blocker telemetry.
 
-### R3. Executive Dashboard & Submission Finalization
-Verify local and cloud endpoints (`/dashboard`, `/healthz`, `/mcp/sse`), ensuring the full hackathon submission package is verified and documented.
+### R3. Executive Dashboard & Production Finalization
+Verify local and cloud endpoints (`/dashboard`, `/healthz`, `/mcp/sse`), ensuring the full enterprise production package is verified and documented.
 
 ## Acceptance Criteria
 

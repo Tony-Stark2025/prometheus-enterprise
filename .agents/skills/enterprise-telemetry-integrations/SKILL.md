@@ -20,9 +20,9 @@ resp = await client.get(search_url, headers=auth_headers, params=params)
 - Never allow tools to fall back to hardcoded mock arrays (`cls.MOCK_PRS`, `cls.MOCK_ISSUES`) in production when real API credentials are configured.
 - If real credentials return an empty array (`[]`), return `[]` so the application displays a genuine "Healthy / All Clear" state.
 
-## 3. Dynamic Latency Thresholding for Live Demos
+## 3. Dynamic Latency Thresholding for Live Demos & Evaluations
 - In enterprise production, stale PR thresholds default to `48.0` hours.
-- In live hackathon demos or test environments, allow `STALE_PR_HOURS_THRESHOLD` to be configured (e.g. `1.0` or `0.0`) so newly opened test PRs are immediately flagged as review bottlenecks.
+- In staging environments, integration tests, or evaluation suites, allow `STALE_PR_HOURS_THRESHOLD` to be configured (e.g. `1.0` or `0.0`) so test PRs are immediately flagged as review bottlenecks.
 
 ## 4. Slack Bot User Permissions & Ingestion
 - Ensure the bot user is invited to the monitored channel (`/invite @botname`).

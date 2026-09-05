@@ -11,12 +11,12 @@ logger = logging.getLogger('prometheus.auth.dependencies')
 security_bearer = HTTPBearer(auto_error=False)
 
 class UserContext(BaseModel):
-    user_id: str = 'lead-01'
-    email: str = 'alex.lead@enterprise.io'
-    name: str = 'Alex Rivera'
+    user_id: str = 'elena.lead'
+    email: str = 'elena.lead@acme.corp'
+    name: str = 'Elena Rostova'
     picture: Optional[str] = None
     tenant_id: str = 'default_enterprise'
-    roles: List[str] = Field(default_factory=lambda: ['lead', 'admin'])
+    roles: List[str] = Field(default_factory=lambda: ['lead', 'admin', 'chief_of_staff'])
     org_scopes: List[str] = Field(default_factory=lambda: ['engineering', 'platform'])
 
 async def get_current_user_optional(

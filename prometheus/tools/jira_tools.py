@@ -14,8 +14,10 @@ import httpx
 
 try:
     from prometheus.config import settings
+    from prometheus.memory.firestore_store import firestore_store
 except ImportError:
     from app.config import settings
+    from app.memory.firestore_store import firestore_store
 
 logger = logging.getLogger(__name__)
 
@@ -26,50 +28,10 @@ class JiraTools:
     Ingests sprint tickets, epic blocker dependencies, and workstream status across teams.
     """
 
-    MOCK_ISSUES: List[Dict[str, Any]] = [
-        {
-            "key": "PROJ-108",
-            "summary": "Release v2.1 User Authentication & Federation Gateway",
-            "type": "Epic",
-            "status": "BLOCKED",
-            "priority": "Highest",
-            "sprint": "Sprint 24 - Core Platform",
-            "assignee": "alex-lead",
-            "reporter": "product-dan",
-            "blocked_by": ["PR-402", "PR-415"],
-            "blocker_reason": "Waiting on auth-service OAuth 2.1 PR review and web-gateway CI failure resolution.",
-            "scopes": ["engineering", "platform"],
-            "target_release_date": "2026-08-28",
-        },
-        {
-            "key": "PROJ-112",
-            "summary": "Implement Redis session caching for high-concurrency auth",
-            "type": "Story",
-            "status": "IN_PROGRESS",
-            "priority": "Medium",
-            "sprint": "Sprint 24 - Core Platform",
-            "assignee": "dev-sarah",
-            "reporter": "alex-lead",
-            "blocked_by": [],
-            "blocker_reason": None,
-            "scopes": ["engineering", "platform"],
-            "target_release_date": "2026-08-30",
-        },
-        {
-            "key": "PROJ-99",
-            "summary": "Fix billing reconciliation edge case in EU VAT calculation",
-            "type": "Bug",
-            "status": "IN_REVIEW",
-            "priority": "High",
-            "sprint": "Sprint 18 - Billing Squad",
-            "assignee": "dev-marcus",
-            "reporter": "support-lead",
-            "blocked_by": [],
-            "blocker_reason": None,
-            "scopes": ["engineering", "finance"],
-            "target_release_date": "2026-08-25",
-        },
-    ]
+    @classmethod
+    async def _get_sandbox_issues(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
+        """Loads sandbox Jira issues dynamically from Google Cloud Firestore."""
+        return await firestore_store.get_sandbox_telemetry(tenant_id=tenant_id, telemetry_type="issues")
 
     @classmethod
     def _get_auth_headers(cls) -> Dict[str, str]:
@@ -193,7 +155,7 @@ class JiraTools:
         Gracefully falls back to realistic mock fixtures if unauthenticated or rate limited.
         """
         if not settings.jira_instance_url or not settings.jira_api_token:
-            issues = cls.MOCK_ISSUES
+            issues = await cls._get_sandbox_issues()
             if scopes:
                 return [i for i in issues if any(s in i.get("scopes", []) for s in scopes)]
             return issues
@@ -228,15 +190,17 @@ class JiraTools:
                 # Rate Limit Handling (HTTP 429)
                 if resp.status_code == 429:
                     retry_after = resp.headers.get("Retry-After", "unknown")
-                    logger.warning(f"Jira API 429 Rate Limit (Retry-After: {retry_after}s). Failing over to mock issues.")
-                    return cls.MOCK_ISSUES if not scopes else [
-                        i for i in cls.MOCK_ISSUES if any(s in i.get("scopes", []) for s in scopes)
+                    logger.warning(f"Jira API 429 Rate Limit (Retry-After: {retry_after}s). Failing over to sandbox issues.")
+                    sandbox_issues = await cls._get_sandbox_issues()
+                    return sandbox_issues if not scopes else [
+                        i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
                     ]
 
                 if resp.status_code != 200:
                     logger.warning(f"Jira API search failed with status HTTP {resp.status_code}: {resp.text}")
-                    return cls.MOCK_ISSUES if not scopes else [
-                        i for i in cls.MOCK_ISSUES if any(s in i.get("scopes", []) for s in scopes)
+                    sandbox_issues = await cls._get_sandbox_issues()
+                    return sandbox_issues if not scopes else [
+                        i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
                     ]
 
                 data = resp.json()
@@ -309,15 +273,17 @@ class JiraTools:
                     return [i for i in live_issues if any(s in i.get("scopes", []) for s in scopes)]
                 return live_issues
 
-            logger.info("No live Jira issues returned; falling back to mock fixtures.")
-            return cls.MOCK_ISSUES if not scopes else [
-                i for i in cls.MOCK_ISSUES if any(s in i.get("scopes", []) for s in scopes)
+            logger.info("No live Jira issues returned; fetching sandbox telemetry from Firestore.")
+            sandbox_issues = await cls._get_sandbox_issues()
+            return sandbox_issues if not scopes else [
+                i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
             ]
 
         except Exception as exc:
-            logger.error(f"Live Jira query failed with exception: {exc}. Using mock fallback.")
-            return cls.MOCK_ISSUES if not scopes else [
-                i for i in cls.MOCK_ISSUES if any(s in i.get("scopes", []) for s in scopes)
+            logger.error(f"Live Jira query failed with exception: {exc}. Using sandbox fallback.")
+            sandbox_issues = await cls._get_sandbox_issues()
+            return sandbox_issues if not scopes else [
+                i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
             ]
 
     @classmethod
