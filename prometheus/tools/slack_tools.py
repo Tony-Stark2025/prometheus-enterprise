@@ -1,24 +1,21 @@
 """
 Slack and workstream communication tools for Prometheus.
 Provides public workstream ingestion and Human-In-The-Loop (HITL) action drafting
-via live Slack Web API with rate limiting and hermetic mock fallbacks.
+via live Slack Web API with Firestore Vault & Secret Manager credential resolution.
+Zero mock or synthetic fallback data.
 """
 
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any, Optional
+import uuid
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional, Tuple
 
 import httpx
 
-try:
-    from prometheus.config import settings
-    from prometheus.memory.state_store import state_store, ActionDraftRecord, DraftStatus
-    from prometheus.memory.firestore_store import firestore_store
-except ImportError:
-    from app.config import settings
-    from app.memory.state_store import state_store, ActionDraftRecord, DraftStatus
-    from app.memory.firestore_store import firestore_store
+from prometheus.config import settings
+from prometheus.memory.state_store import state_store, ActionDraftRecord, DraftStatus
+from prometheus.memory.firestore_store import firestore_store
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +25,6 @@ class SlackTools:
     Enterprise Slack Web API telemetry client and HITL action dispatcher.
     Ingests public communication context and dispatches interactive Block Kit action cards strictly upon human approval.
     """
-
-    @classmethod
-    async def _get_sandbox_messages(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
-        """Loads sandbox Slack messages dynamically from Google Cloud Firestore."""
-        return await firestore_store.get_sandbox_telemetry(tenant_id=tenant_id, telemetry_type="messages")
 
     _user_cache: Dict[str, str] = {}
     _channel_cache: Dict[str, str] = {}
@@ -49,13 +41,42 @@ class SlackTools:
         return cls._action_locks[loop]
 
     @classmethod
-    def _get_headers(cls) -> Dict[str, str]:
+    async def _resolve_credentials(
+        cls,
+        channel_names: Optional[List[str]] = None,
+        tenant_id: str = "default_enterprise",
+    ) -> Tuple[Optional[str], List[str]]:
+        """Resolves Slack bot token and channel list from Firestore Vault or settings."""
+        vault_cfg = await firestore_store.get_integration(tenant_id, "slack") or {}
+        token = (
+            vault_cfg.get("slack_bot_token")
+            or vault_cfg.get("bot_token")
+            or vault_cfg.get("token")
+            or settings.slack_bot_token
+        )
+        raw_channels = (
+            channel_names
+            or vault_cfg.get("slack_channels")
+            or vault_cfg.get("channels")
+            or settings.slack_channels
+        )
+        if isinstance(raw_channels, str):
+            target_channels = [c.strip() for c in raw_channels.split(",") if c.strip()]
+        elif isinstance(raw_channels, list):
+            target_channels = [str(c).strip() for c in raw_channels if str(c).strip()]
+        else:
+            target_channels = []
+        return token, target_channels
+
+    @classmethod
+    def _get_headers(cls, token: Optional[str] = None) -> Dict[str, str]:
+        resolved_token = token if token is not None else settings.slack_bot_token
         headers = {
             "Content-Type": "application/json; charset=utf-8",
             "User-Agent": "Prometheus-Observability-Fleet/1.1",
         }
-        if settings.slack_bot_token:
-            headers["Authorization"] = f"Bearer {settings.slack_bot_token}"
+        if resolved_token:
+            headers["Authorization"] = f"Bearer {resolved_token}"
         return headers
 
     @classmethod
@@ -68,14 +89,16 @@ class SlackTools:
         return ["engineering", "platform"]
 
     @classmethod
-    async def _resolve_channel_id(cls, client: httpx.AsyncClient, channel_name: str) -> Optional[str]:
+    async def _resolve_channel_id(
+        cls, client: httpx.AsyncClient, channel_name: str, token: Optional[str] = None
+    ) -> Optional[str]:
         clean_name = channel_name.lstrip("#").lower()
         if clean_name in cls._channel_cache:
             return cls._channel_cache[clean_name]
 
         try:
             url = "https://slack.com/api/conversations.list?types=public_channel,private_channel&exclude_archived=true&limit=100"
-            resp = await client.get(url, headers=cls._get_headers())
+            resp = await client.get(url, headers=cls._get_headers(token))
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"):
@@ -91,55 +114,54 @@ class SlackTools:
         return cls._channel_cache.get(clean_name, None)
 
     @classmethod
-    async def _resolve_user_id(cls, client: httpx.AsyncClient, username: str) -> Optional[str]:
+    async def _resolve_user_id(
+        cls, client: httpx.AsyncClient, username: str, token: Optional[str] = None
+    ) -> Optional[str]:
         clean_user = username.lstrip("@").lower().strip()
+        if not clean_user:
+            return None
         for uid, uname in cls._user_cache.items():
             if uname.lower() == clean_user:
                 return uid
 
         try:
             url = "https://slack.com/api/users.list?limit=100"
-            resp = await client.get(url, headers=cls._get_headers())
+            resp = await client.get(url, headers=cls._get_headers(token))
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"):
-                    first_human_id: Optional[str] = None
                     for member in data.get("members", []):
                         uid = member.get("id")
                         uname = member.get("name", "")
                         dname = member.get("profile", {}).get("display_name", "")
                         rname = member.get("profile", {}).get("real_name", "")
                         email = member.get("profile", {}).get("email", "")
-                        is_bot = member.get("is_bot", False) or uid == "USLACKBOT"
-                        if uid and not is_bot and not first_human_id:
-                            first_human_id = uid
 
                         if uid:
                             resolved_name = dname or uname or uid
                             cls._user_cache[uid] = resolved_name
-                            if (clean_user and (
+                            if (
                                 uname.lower() == clean_user
                                 or dname.lower() == clean_user
                                 or clean_user in uname.lower()
                                 or clean_user in (rname or "").lower()
                                 or clean_user in (email or "").lower()
-                            )):
+                            ):
                                 return uid
-
-                    if first_human_id:
-                        return first_human_id
         except Exception as e:
             logger.warning(f"Failed to resolve Slack user '{username}': {e}")
         return None
 
     @classmethod
-    async def _resolve_username_by_id(cls, client: httpx.AsyncClient, user_id: str) -> str:
+    async def _resolve_username_by_id(
+        cls, client: httpx.AsyncClient, user_id: str, token: Optional[str] = None
+    ) -> str:
         if user_id in cls._user_cache:
             return cls._user_cache[user_id]
 
         try:
             url = f"https://slack.com/api/users.info?user={user_id}"
-            resp = await client.get(url, headers=cls._get_headers())
+            resp = await client.get(url, headers=cls._get_headers(token))
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("ok"):
@@ -152,56 +174,38 @@ class SlackTools:
         except Exception:
             pass
 
-        try:
-            url = "https://slack.com/api/users.list?limit=100"
-            resp = await client.get(url, headers=cls._get_headers())
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("ok"):
-                    for member in data.get("members", []):
-                        uid = member.get("id")
-                        uname = member.get("name", "")
-                        dname = member.get("profile", {}).get("display_name", "")
-                        if uid:
-                            cls._user_cache[uid] = dname or uname or uid
-                    if user_id in cls._user_cache:
-                        return cls._user_cache[user_id]
-        except Exception:
-            pass
-
-        return f"dev-{user_id}" if user_id != "unknown" else "dev-user"
+        return user_id if user_id != "unknown" else "unknown"
 
     @classmethod
     async def get_recent_channel_messages(
         cls,
         scopes: Optional[List[str]] = None,
         channel_names: Optional[List[str]] = None,
+        tenant_id: str = "default_enterprise",
     ) -> List[Dict[str, Any]]:
-        if not settings.slack_bot_token:
-            msgs = await cls._get_sandbox_messages()
-            if scopes:
-                return [m for m in msgs if any(s in m.get("scopes", []) for s in scopes)]
-            return msgs
-
-        target_channels = channel_names or settings.slack_channels
-        if isinstance(target_channels, str):
-            target_channels = [c.strip() for c in target_channels.split(",") if c.strip()]
+        """
+        Ingests recent messages from configured Slack channels via live Slack Web API.
+        Returns an empty list if Slack credentials are not configured or API fails.
+        """
+        token, target_channels = await cls._resolve_credentials(
+            channel_names=channel_names, tenant_id=tenant_id
+        )
+        if not token or not target_channels:
+            logger.info("Slack credentials or channels not configured; returning empty message list.")
+            return []
 
         live_messages: List[Dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 for ch_name in target_channels:
                     clean_ch_name = ch_name.lstrip("#")
-                    ch_id = await cls._resolve_channel_id(client, clean_ch_name) or clean_ch_name
+                    ch_id = await cls._resolve_channel_id(client, clean_ch_name, token) or clean_ch_name
                     url = f"https://slack.com/api/conversations.history?channel={ch_id}&limit=20"
-                    resp = await client.get(url, headers=cls._get_headers())
+                    resp = await client.get(url, headers=cls._get_headers(token))
 
                     if resp.status_code == 429:
-                        logger.warning("Slack API rate limit encountered. Falling back to sandbox messages.")
-                        sandbox_msgs = await cls._get_sandbox_messages()
-                        return sandbox_msgs if not scopes else [
-                            m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
-                        ]
+                        logger.warning("Slack API rate limit encountered.")
+                        break
 
                     if resp.status_code != 200:
                         continue
@@ -209,21 +213,24 @@ class SlackTools:
                     data = resp.json()
                     if not data.get("ok"):
                         if data.get("error") == "ratelimited":
-                            sandbox_msgs = await cls._get_sandbox_messages()
-                            return sandbox_msgs if not scopes else [
-                                m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
-                            ]
+                            logger.warning("Slack API returned ratelimited error.")
+                            break
                         continue
 
                     raw_messages = data.get("messages", [])
-                    for msg in raw_messages:
-                        if msg.get("subtype") in ("channel_join", "channel_leave", "bot_message"):
-                            continue
+                    valid_msgs = [m for m in raw_messages if m.get("subtype") not in ("channel_join", "channel_leave", "bot_message")]
+                    unique_users = list({m.get("user") for m in valid_msgs if m.get("user")})
+                    if unique_users:
+                        resolved_list = await asyncio.gather(*[cls._resolve_username_by_id(client, uid, token) for uid in unique_users])
+                        user_map = dict(zip(unique_users, resolved_list))
+                    else:
+                        user_map = {}
 
+                    for msg in valid_msgs:
                         user_id = msg.get("user", "unknown")
-                        username = await cls._resolve_username_by_id(client, user_id)
+                        username = user_map.get(user_id, user_id)
                         text = msg.get("text", "")
-                        inferred_scopes = cls._infer_scopes(text)
+                        inferred_scopes = cls._infer_scopes(f"{clean_ch_name} {text}")
 
                         live_messages.append({
                             "id": f"MSG-{msg.get('ts', '').replace('.', '')[:10]}",
@@ -239,13 +246,8 @@ class SlackTools:
                         })
 
         except Exception as exc:
-            logger.warning(f"Live Slack ingestion encountered exception: {exc}")
-
-        if not live_messages:
-            sandbox_msgs = await cls._get_sandbox_messages()
-            return sandbox_msgs if not scopes else [
-                m for m in sandbox_msgs if any(s in m.get("scopes", []) for s in scopes)
-            ]
+            logger.error(f"Live Slack ingestion failed: {exc}")
+            return []
 
         if scopes:
             return [m for m in live_messages if any(s in m.get("scopes", []) for s in scopes)]
@@ -262,8 +264,24 @@ class SlackTools:
     ) -> ActionDraftRecord:
         """
         Creates a proposed action draft requiring explicit human sign-off before dispatch.
+        Deduplicates against existing PENDING drafts for the same blocker, target, and action_type.
         """
-        draft_id = f"DRAFT-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        if context_blocker_id:
+            existing_pending = await state_store.list_drafts(status=DraftStatus.PENDING)
+            for existing in existing_pending:
+                if (
+                    existing.context_blocker_id == context_blocker_id
+                    and existing.target_channel_or_user == target
+                    and existing.action_type == action_type
+                ):
+                    updated = await state_store.update_draft_content(
+                        draft_id=existing.draft_id,
+                        content=content,
+                        target=target,
+                    )
+                    return updated or existing
+
+        draft_id = f"DRAFT-{int(datetime.now(timezone.utc).timestamp() * 1000)}-{uuid.uuid4().hex[:6]}"
         draft = ActionDraftRecord(
             draft_id=draft_id,
             target_channel_or_user=target,
@@ -280,7 +298,12 @@ class SlackTools:
         return draft
 
     @classmethod
-    async def dispatch_approved_action(cls, draft_id: str, approver_username: str) -> Dict[str, Any]:
+    async def dispatch_approved_action(
+        cls,
+        draft_id: str,
+        approver_username: str,
+        tenant_id: str = "default_enterprise",
+    ) -> Dict[str, Any]:
         async with cls._get_lock():
             draft = await state_store.get_draft(draft_id)
             if not draft:
@@ -289,36 +312,24 @@ class SlackTools:
             if draft.status == DraftStatus.EXECUTED:
                 return {"status": "already_executed", "draft_id": draft_id}
 
+            token, _ = await cls._resolve_credentials(tenant_id=tenant_id)
             result_message: str
 
-            if settings.slack_bot_token:
+            if token:
                 try:
                     async with httpx.AsyncClient(timeout=10.0) as client:
                         target = draft.target_channel_or_user
                         target_channel_id: Optional[str] = None
 
                         if target.startswith("#"):
-                            target_channel_id = await cls._resolve_channel_id(client, target.lstrip("#"))
+                            target_channel_id = await cls._resolve_channel_id(client, target.lstrip("#"), token)
                         elif target.startswith("@") or not target.startswith("C"):
-                            user_id = await cls._resolve_user_id(client, target.lstrip("@"))
+                            user_id = await cls._resolve_user_id(client, target.lstrip("@"), token)
                             if user_id:
-                                open_dm_url = "https://slack.com/api/conversations.open"
                                 open_resp = await client.post(
-                                    open_dm_url,
-                                    headers=cls._get_headers(),
+                                    "https://slack.com/api/conversations.open",
+                                    headers=cls._get_headers(token),
                                     json={"users": user_id},
-                                )
-                                if open_resp.status_code == 200 and open_resp.json().get("ok"):
-                                    target_channel_id = open_resp.json().get("channel", {}).get("id")
-
-                        if not target_channel_id:
-                            fallback_uid = await cls._resolve_user_id(client, approver_username)
-                            if fallback_uid:
-                                open_dm_url = "https://slack.com/api/conversations.open"
-                                open_resp = await client.post(
-                                    open_dm_url,
-                                    headers=cls._get_headers(),
-                                    json={"users": fallback_uid},
                                 )
                                 if open_resp.status_code == 200 and open_resp.json().get("ok"):
                                     target_channel_id = open_resp.json().get("channel", {}).get("id")
@@ -331,22 +342,8 @@ class SlackTools:
                         if draft.metadata and "slack_blocks" in draft.metadata:
                             post_payload["blocks"] = draft.metadata["slack_blocks"]
 
-                        post_resp = await client.post(post_url, headers=cls._get_headers(), json=post_payload)
+                        post_resp = await client.post(post_url, headers=cls._get_headers(token), json=post_payload)
                         post_data = post_resp.json() if post_resp.status_code == 200 else {}
-
-                        if not post_data.get("ok") and post_data.get("error") == "channel_not_found":
-                            fallback_uid = await cls._resolve_user_id(client, approver_username)
-                            if fallback_uid:
-                                open_resp = await client.post(
-                                    "https://slack.com/api/conversations.open",
-                                    headers=cls._get_headers(),
-                                    json={"users": fallback_uid},
-                                )
-                                if open_resp.status_code == 200 and open_resp.json().get("ok"):
-                                    dm_cid = open_resp.json().get("channel", {}).get("id")
-                                    post_payload["channel"] = dm_cid
-                                    post_resp = await client.post(post_url, headers=cls._get_headers(), json=post_payload)
-                                    post_data = post_resp.json() if post_resp.status_code == 200 else {}
 
                         if post_data.get("ok"):
                             msg_ts = post_data.get("ts", "")
@@ -357,19 +354,19 @@ class SlackTools:
                         else:
                             slack_err = post_data.get("error", f"HTTP_{post_resp.status_code}")
                             result_message = (
-                                f"Dispatched '{draft.action_type}' to '{target}' with Slack API response: {slack_err} "
+                                f"Slack API returned '{slack_err}' for '{target}' "
                                 f"(Approved by {approver_username})."
                             )
                 except Exception as exc:
                     logger.error(f"Live Slack dispatch exception: {exc}")
                     result_message = (
-                        f"Successfully dispatched '{draft.action_type}' to '{draft.target_channel_or_user}' "
-                        f"(Approved by {approver_username}, live fallback recorded)."
+                        f"Slack API transport error ({exc}) while dispatching '{draft.action_type}' to '{draft.target_channel_or_user}' "
+                        f"(Approved by {approver_username})."
                     )
             else:
                 result_message = (
-                    f"Successfully dispatched '{draft.action_type}' to '{draft.target_channel_or_user}' "
-                    f"(Approved by {approver_username})."
+                    f"Approved '{draft.action_type}' for '{draft.target_channel_or_user}' "
+                    f"(Approved by {approver_username}; Slack token unconfigured)."
                 )
 
             await state_store.update_draft_status(

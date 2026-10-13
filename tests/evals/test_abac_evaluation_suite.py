@@ -1,12 +1,102 @@
 import pytest
 import tempfile
 import os
-from prometheus.security.abac_engine import ABACPolicyEngine, CLEARANCE_HIERARCHY
+from prometheus.security.abac_engine import (
+    ABACPolicyEngine,
+    ABACUserRecord,
+    ABACResourceRecord,
+    CLEARANCE_HIERARCHY,
+)
 
 
 @pytest.fixture
 def temp_abac_engine():
     engine = ABACPolicyEngine(db_path=":memory:")
+    engine.register_user(
+        ABACUserRecord(
+            user_id="elena.lead",
+            username="elena.lead",
+            email="elena.lead@enterprise.io",
+            department="engineering",
+            clearance_level="L5",
+            assigned_squads=["platform", "security"],
+            roles=["admin", "vp_engineering"],
+            is_admin=True,
+        )
+    )
+    engine.register_user(
+        ABACUserRecord(
+            user_id="david.kim",
+            username="david.kim",
+            email="david.kim@enterprise.io",
+            department="engineering",
+            clearance_level="L4",
+            assigned_squads=["platform", "auth"],
+            roles=["staff_engineer"],
+            is_admin=False,
+        )
+    )
+    engine.register_user(
+        ABACUserRecord(
+            user_id="sarah.chen",
+            username="sarah.chen",
+            email="sarah.chen@enterprise.io",
+            department="engineering",
+            clearance_level="L3",
+            assigned_squads=["security", "auth"],
+            roles=["senior_engineer"],
+            is_admin=False,
+        )
+    )
+    engine.register_user(
+        ABACUserRecord(
+            user_id="marcus.vance",
+            username="marcus.vance",
+            email="marcus.vance@enterprise.io",
+            department="product",
+            clearance_level="L3",
+            assigned_squads=["billing"],
+            roles=["product_manager"],
+            is_admin=False,
+        )
+    )
+
+    engine.register_resource(
+        ABACResourceRecord(
+            resource_id="PR-102",
+            name="Idempotency Key Collision on Retry",
+            resource_type="github_pr",
+            required_department="engineering",
+            min_clearance_level="L3",
+            required_squad="platform",
+            sensitivity="INTERNAL",
+            is_restricted=False,
+        )
+    )
+    engine.register_resource(
+        ABACResourceRecord(
+            resource_id="SEC-AUDIT-2026",
+            name="2026 SOC2 Security Audit",
+            resource_type="security_audit",
+            required_department="engineering",
+            min_clearance_level="L4",
+            required_squad="security",
+            sensitivity="CONFIDENTIAL",
+            is_restricted=False,
+        )
+    )
+    engine.register_resource(
+        ABACResourceRecord(
+            resource_id="PROD-PAYMENT-VAULT",
+            name="Production Payment HSM Vault",
+            resource_type="vault",
+            required_department="engineering",
+            min_clearance_level="L5",
+            required_squad="platform",
+            sensitivity="RESTRICTED",
+            is_restricted=True,
+        )
+    )
     yield engine
 
 

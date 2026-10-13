@@ -142,125 +142,35 @@ class ABACPolicyEngine:
         """)
         conn.commit()
 
-        self._seed_default_enterprise_data()
-
-    def _seed_default_enterprise_data(self):
-        """Seeds standard enterprise test matrices for Prometheus."""
-        default_users = [
-            ABACUserRecord(
-                user_id="elena.lead",
-                username="elena.lead",
-                email="elena.lead@acme.corp",
-                department="engineering",
-                clearance_level="L5",
-                assigned_squads=["auth", "platform", "core", "security"],
-                roles=["chief_of_staff", "lead", "admin"],
-                is_admin=True,
-            ),
-            ABACUserRecord(
-                user_id="david.kim",
-                username="david.kim",
-                email="david.kim@acme.corp",
-                department="engineering",
-                clearance_level="L4",
-                assigned_squads=["auth", "security"],
-                roles=["staff_engineer", "reviewer"],
-                is_admin=False,
-            ),
-            ABACUserRecord(
-                user_id="sarah.chen",
-                username="sarah.chen",
-                email="sarah.chen@acme.corp",
-                department="engineering",
-                clearance_level="L3",
-                assigned_squads=["frontend", "design"],
-                roles=["senior_engineer"],
-                is_admin=False,
-            ),
-            ABACUserRecord(
-                user_id="marcus.vance",
-                username="marcus.vance",
-                email="marcus.vance@acme.corp",
-                department="product",
-                clearance_level="L3",
-                assigned_squads=["growth", "mobile"],
-                roles=["product_manager"],
-                is_admin=False,
-            ),
-            ABACUserRecord(
-                user_id="guest.auditor",
-                username="guest.auditor",
-                email="auditor@external.io",
-                department="external",
-                clearance_level="L1",
-                assigned_squads=[],
-                roles=["guest"],
-                is_admin=False,
-            ),
-        ]
-
-        default_resources = [
-            ABACResourceRecord(
-                resource_id="PR-102",
-                name="OAuth 2.1 Token Exchange (PR #102)",
-                resource_type="github_pr",
-                required_department="engineering",
-                min_clearance_level="L2",
-                required_squad="auth",
-                sensitivity="INTERNAL",
-            ),
-            ABACResourceRecord(
-                resource_id="ACME-104",
-                name="Auth Gateway OAuth 2.1 Migration (ACME-104)",
-                resource_type="jira_issue",
-                required_department="engineering",
-                min_clearance_level="L2",
-                required_squad="auth",
-                sensitivity="INTERNAL",
-            ),
-            ABACResourceRecord(
-                resource_id="SEC-AUDIT-2026",
-                name="Zero-Trust Architecture Telemetry Audit",
-                resource_type="security_audit",
-                required_department="engineering",
-                min_clearance_level="L4",
-                required_squad="platform",
-                sensitivity="CONFIDENTIAL",
-            ),
-            ABACResourceRecord(
-                resource_id="PROD-PAYMENT-VAULT",
-                name="Payment Processing Hardware Security Module",
-                resource_type="vault",
-                required_department="security",
-                min_clearance_level="L5",
-                required_squad="security",
-                sensitivity="RESTRICTED",
-                is_restricted=True,
-            ),
-        ]
-
+    def register_user(self, u: ABACUserRecord) -> ABACUserRecord:
+        """Registers or updates an enterprise user in the ABAC catalog."""
         with self._get_conn() as conn:
             cur = conn.cursor()
-            for u in default_users:
-                cur.execute("""
-                    INSERT OR REPLACE INTO abac_users 
-                    (user_id, username, email, department, clearance_level, assigned_squads, roles, is_admin)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    u.user_id, u.username, u.email, u.department, u.clearance_level,
-                    json.dumps(u.assigned_squads), json.dumps(u.roles), 1 if u.is_admin else 0
-                ))
-
-            for r in default_resources:
-                cur.execute("""
-                    INSERT OR REPLACE INTO abac_resources 
-                    (resource_id, name, resource_type, required_department, min_clearance_level, required_squad, sensitivity, is_restricted)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    r.resource_id, r.name, r.resource_type, r.required_department,
-                    r.min_clearance_level, r.required_squad, r.sensitivity, 1 if r.is_restricted else 0
-                ))
+            cur.execute("""
+                INSERT OR REPLACE INTO abac_users 
+                (user_id, username, email, department, clearance_level, assigned_squads, roles, is_admin)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                u.user_id, u.username, u.email, u.department, u.clearance_level,
+                json.dumps(u.assigned_squads), json.dumps(u.roles), 1 if u.is_admin else 0
+            ))
             conn.commit()
+        return u
+
+    def register_resource(self, r: ABACResourceRecord) -> ABACResourceRecord:
+        """Registers or updates a protected target resource in the ABAC catalog."""
+        with self._get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT OR REPLACE INTO abac_resources 
+                (resource_id, name, resource_type, required_department, min_clearance_level, required_squad, sensitivity, is_restricted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                r.resource_id, r.name, r.resource_type, r.required_department,
+                r.min_clearance_level, r.required_squad, r.sensitivity, 1 if r.is_restricted else 0
+            ))
+            conn.commit()
+        return r
 
     def get_user(self, user_id: str) -> Optional[ABACUserRecord]:
         with self._get_conn() as conn:

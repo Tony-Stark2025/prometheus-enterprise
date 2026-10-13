@@ -1,4 +1,4 @@
-
+import asyncio
 import os
 import json
 import logging
@@ -37,23 +37,43 @@ class FirestoreStore:
             'integrations': {},
             'tenants': {}
         }
+        self._db_loop = None
         self._init_client()
 
     def _init_client(self):
         try:
             from google.cloud import firestore
             self._db = firestore.AsyncClient(project=self.project_id)
+            try:
+                self._db_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._db_loop = None
             logger.info(f'Connected to Google Cloud Firestore (project: {self.project_id})')
         except Exception as e:
             logger.warning(f'Firestore async client initialization skipped (using memory cache): {e}')
             self._db = None
+            self._db_loop = None
+
+    def _get_db(self):
+        if self._db is None:
+            return None
+        try:
+            current_loop = asyncio.get_running_loop()
+            if self._db_loop is not current_loop:
+                from google.cloud import firestore
+                self._db = firestore.AsyncClient(project=self.project_id)
+                self._db_loop = current_loop
+        except Exception:
+            self._db = None
+        return self._db
 
     async def save_user(self, profile: UserProfile) -> UserProfile:
         self._memory_cache['users'][profile.user_id] = profile.model_dump()
-        if self._db:
+        db = self._get_db()
+        if db:
             try:
-                doc_ref = self._db.collection('users').document(profile.user_id)
-                await doc_ref.set(profile.model_dump())
+                doc_ref = db.collection('users').document(profile.user_id)
+                await asyncio.wait_for(doc_ref.set(profile.model_dump()), timeout=3.0)
             except Exception as e:
                 logger.warning(f'Failed to write user to Firestore: {e}')
         return profile
@@ -61,10 +81,11 @@ class FirestoreStore:
     async def get_user(self, user_id: str) -> Optional[UserProfile]:
         if user_id in self._memory_cache['users']:
             return UserProfile(**self._memory_cache['users'][user_id])
-        if self._db:
+        db = self._get_db()
+        if db:
             try:
-                doc_ref = self._db.collection('users').document(user_id)
-                doc = await doc_ref.get()
+                doc_ref = db.collection('users').document(user_id)
+                doc = await asyncio.wait_for(doc_ref.get(), timeout=3.0)
                 if doc.exists:
                     data = doc.to_dict()
                     self._memory_cache['users'][user_id] = data
@@ -86,10 +107,11 @@ class FirestoreStore:
         key = f'{tenant_id}:{service}'
         self._memory_cache['integrations'][key] = integration.model_dump()
 
-        if self._db:
+        db = self._get_db()
+        if db:
             try:
-                doc_ref = self._db.collection('tenants').document(tenant_id).collection('integrations').document(service)
-                await doc_ref.set(integration.model_dump())
+                doc_ref = db.collection('tenants').document(tenant_id).collection('integrations').document(service)
+                await asyncio.wait_for(doc_ref.set(integration.model_dump()), timeout=3.0)
             except Exception as e:
                 logger.warning(f'Failed to write integration to Firestore: {e}')
         return integration
@@ -99,16 +121,18 @@ class FirestoreStore:
         raw_config = None
         if key in self._memory_cache['integrations']:
             raw_config = self._memory_cache['integrations'][key].get('config')
-        elif self._db:
-            try:
-                doc_ref = self._db.collection('tenants').document(tenant_id).collection('integrations').document(service)
-                doc = await doc_ref.get()
-                if doc.exists:
-                    data = doc.to_dict()
-                    self._memory_cache['integrations'][key] = data
-                    raw_config = data.get('config')
-            except Exception as e:
-                logger.warning(f'Failed to read integration from Firestore: {e}')
+        else:
+            db = self._get_db()
+            if db:
+                try:
+                    doc_ref = db.collection('tenants').document(tenant_id).collection('integrations').document(service)
+                    doc = await asyncio.wait_for(doc_ref.get(), timeout=3.0)
+                    if doc.exists:
+                        data = doc.to_dict()
+                        self._memory_cache['integrations'][key] = data
+                        raw_config = data.get('config')
+                except Exception as e:
+                    logger.warning(f'Failed to read integration from Firestore: {e}')
 
         if not raw_config:
             return None
@@ -150,31 +174,6 @@ class FirestoreStore:
             except Exception as e:
                 logger.warning(f'Failed to delete integration in Firestore: {e}')
         return True
-
-    async def get_sandbox_telemetry(self, tenant_id: str, telemetry_type: str) -> List[Dict[str, Any]]:
-        """
-        Retrieves dynamic sandbox telemetry records from Firestore or memory cache for isolated demo/testing.
-        telemetry_type: 'prs', 'issues', or 'messages'
-        """
-        cache_key = f'{tenant_id}:sandbox_{telemetry_type}'
-        if cache_key in self._memory_cache:
-            return self._memory_cache[cache_key]
-
-        if self._db:
-            try:
-                col_ref = self._db.collection('tenants').document(tenant_id).collection(f'sandbox_{telemetry_type}')
-                docs = await col_ref.get()
-                if docs:
-                    data = [d.to_dict() for d in docs]
-                    self._memory_cache[cache_key] = data
-                    return data
-            except Exception as e:
-                logger.warning(f'Failed to read sandbox telemetry from Firestore: {e}')
-
-        # Default fallback: dynamic clean enterprise data if unseeded
-        from tools.seed_firestore_sandbox import seed_tenant_sandbox
-        await seed_tenant_sandbox(tenant_id)
-        return self._memory_cache.get(cache_key, [])
 
 
 firestore_store = FirestoreStore()

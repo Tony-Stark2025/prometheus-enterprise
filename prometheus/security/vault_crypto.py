@@ -22,11 +22,11 @@ class VaultCrypto:
 
     def __init__(self, master_key: Optional[str] = None):
         seed = (master_key or DEFAULT_VAULT_SEED).encode("utf-8")
-        # Derive 256-bit key via SHA-256
-        self._key = hashlib.sha256(seed).digest()
+        salt = os.getenv("VAULT_KDF_SALT", "prometheus-enterprise-kdf-salt-v1").encode("utf-8")
+        self._key = hashlib.pbkdf2_hmac("sha256", seed, salt, 100_000, dklen=32)
         self._aesgcm = AESGCM(self._key)
 
-    def encrypt(self, plaintext: str) -> str:
+    def encrypt(self, plaintext: str, associated_data: Optional[bytes] = None) -> str:
         """
         Encrypts plaintext string with fresh 96-bit nonce and returns URL-safe Base64 ciphertext.
         Format: nonce (12 bytes) + ciphertext + auth_tag (16 bytes)
@@ -35,16 +35,16 @@ class VaultCrypto:
             return ""
         try:
             nonce = os.urandom(12)
-            ciphertext = self._aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+            ciphertext = self._aesgcm.encrypt(nonce, plaintext.encode("utf-8"), associated_data)
             combined = nonce + ciphertext
             return "enc:v1:" + base64.urlsafe_b64encode(combined).decode("ascii")
         except Exception as e:
             logger.error(f"Failed to encrypt secret payload: {e}")
             raise
 
-    def decrypt(self, encoded_ciphertext: str) -> str:
+    def decrypt(self, encoded_ciphertext: str, associated_data: Optional[bytes] = None) -> str:
         """
-        Decrypts an encrypted string. If the string is not encrypted (e.g. legacy or plaintext), returns it as-is.
+        Decrypts an encrypted string. Returns empty string on decryption failure to prevent leaking raw ciphertext.
         """
         if not encoded_ciphertext:
             return ""
@@ -55,11 +55,11 @@ class VaultCrypto:
             combined = base64.urlsafe_b64decode(raw_b64.encode("ascii"))
             nonce = combined[:12]
             ciphertext = combined[12:]
-            decrypted = self._aesgcm.decrypt(nonce, ciphertext, None)
+            decrypted = self._aesgcm.decrypt(nonce, ciphertext, associated_data)
             return decrypted.decode("utf-8")
         except Exception as e:
             logger.warning(f"Failed to decrypt vault secret (possible key mismatch or corrupted data): {e}")
-            return encoded_ciphertext
+            return ""
 
     @staticmethod
     def mask_token(token: str, prefix_len: int = 4, suffix_len: int = 4) -> str:

@@ -1,0 +1,25 @@
+# Lightweight Docker Container for Prometheus Autonomous CI/CD Security Gate
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt pyproject.toml README.md ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY prometheus/ ./prometheus/
+RUN pip install --no-cache-dir -e .
+
+# Non-root secure user
+RUN useradd --create-home --uid 10001 runneruser
+USER runneruser
+
+ENTRYPOINT ["prometheus-scan"]
+CMD ["--help"]

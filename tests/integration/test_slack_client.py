@@ -159,12 +159,10 @@ class TestSlackClient:
 
     @pytest.mark.asyncio
     async def test_slack_live_api_rate_limit_429_handling(self):
-        """Tests Slack API 429 rate limit failover to mock fixtures."""
+        """Tests Slack API 429 rate limit handling returns an empty list cleanly without crashing."""
         mock_resp = httpx.Response(429, json={"ok": False, "error": "ratelimited"}, request=httpx.Request("GET", "https://slack.com/api/conversations.history"))
 
         with patch.object(settings, "slack_bot_token", "xox" + "b-mock-token"), \
              patch("httpx.AsyncClient.get", AsyncMock(return_value=mock_resp)):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert isinstance(msgs, list)
-            assert len(msgs) >= 1
-            assert any(m["id"] == "MSG-901" for m in msgs)
+            assert msgs == []

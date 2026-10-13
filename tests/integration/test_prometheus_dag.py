@@ -31,21 +31,20 @@ class TestPrometheusDAG:
             roles=["tech_lead"],
         )
 
-        with patch.object(settings, "jira_instance_url", None):
-            result: WorkflowExecutionResult = await PrometheusWorkflow.run(
-                user=user,
-                query="Analyze cross-squad sprint delivery risks and telemetry bottlenecks",
-            )
+        result: WorkflowExecutionResult = await PrometheusWorkflow.run(
+            user=user,
+            query="Analyze cross-squad sprint delivery risks and telemetry bottlenecks",
+        )
 
-            assert result.status == "COMPLETED"
-            assert result.session_id.startswith("sess_")
-            assert len(result.blockers) > 0
-            assert len(result.action_drafts) > 0
-            assert result.daily_digest is not None
-            assert "summary_statement" in result.daily_digest
-            assert result.daily_digest.get("critical_blocker_count", 0) >= 1
-            assert "agent_run_metadata" in result.raw_telemetry
-            assert result.raw_telemetry["agent_run_metadata"]["agents_executed"] == 6
+        assert result.status == "COMPLETED"
+        assert result.session_id.startswith("sess_")
+        assert len(result.blockers) > 0
+        assert len(result.action_drafts) > 0
+        assert result.daily_digest is not None
+        assert "summary_statement" in result.daily_digest
+        assert result.daily_digest.get("critical_blocker_count", 0) >= 1
+        assert "agent_run_metadata" in result.raw_telemetry
+        assert result.raw_telemetry["agent_run_metadata"]["agents_executed"] == 6
 
     @pytest.mark.asyncio
     async def test_synthesis_correlation_engine_multi_domain(self):

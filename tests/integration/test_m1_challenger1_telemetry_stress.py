@@ -110,7 +110,7 @@ async def test_github_live_parsing_full_payload_oracle():
 async def test_github_rate_limit_429_and_secondary_403_failover():
     """
     Empirically test that GitHubTools handles HTTP 429 and secondary rate limits (403 with x-ratelimit-remaining=0)
-    by falling back gracefully to realistic MOCK_PRS without crashing.
+    by returning an empty list cleanly without crashing or serving fake mock data.
     """
     # 1. Test HTTP 429
     async def mock_429_handler(request: httpx.Request) -> httpx.Response:
@@ -119,12 +119,10 @@ async def test_github_rate_limit_429_and_secondary_403_failover():
     with patch.object(settings, "github_token", "gh" + "p_test_token"):
         with patch("httpx.AsyncClient", mock_async_client_factory(mock_429_handler)):
             prs_429 = await GitHubTools.get_open_pull_requests()
-            assert len(prs_429) == len(GitHubTools.MOCK_PRS)
-            assert prs_429[0]["id"] == "PR-402"
+            assert prs_429 == []
 
             ci_429 = await GitHubTools.get_ci_pipeline_failures()
-            assert len(ci_429) == len(GitHubTools.MOCK_CI_FAILURES)
-            assert ci_429[0]["id"] == "CI-8902"
+            assert ci_429 == []
 
     # 2. Test HTTP 403 with x-ratelimit-remaining: 0
     async def mock_403_limit_handler(request: httpx.Request) -> httpx.Response:
@@ -133,23 +131,22 @@ async def test_github_rate_limit_429_and_secondary_403_failover():
     with patch.object(settings, "github_token", "gh" + "p_test_token"):
         with patch("httpx.AsyncClient", mock_async_client_factory(mock_403_limit_handler)):
             prs_403 = await GitHubTools.get_open_pull_requests()
-            assert len(prs_403) == len(GitHubTools.MOCK_PRS)
+            assert prs_403 == []
 
 
 @pytest.mark.asyncio
 async def test_github_network_timeout_and_500_resilience():
-    """Test that network timeouts and HTTP 500 errors gracefully failover to mock data."""
+    """Test that network timeouts and HTTP 500 errors return an empty list cleanly without crashing."""
     async def mock_timeout_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("Connection timed out to api.github.com")
 
     with patch.object(settings, "github_token", "gh" + "p_test_token"):
         with patch("httpx.AsyncClient", mock_async_client_factory(mock_timeout_handler)):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == len(GitHubTools.MOCK_PRS)
+            assert prs == []
 
             stale = await GitHubTools.get_stale_pull_requests(hours_threshold=48.0)
-            assert len(stale) >= 1
-            assert stale[0]["id"] == "PR-402"
+            assert stale == []
 
 
 @pytest.mark.asyncio
@@ -294,13 +291,13 @@ async def test_jira_v3_to_v2_endpoint_fallback():
 
     assert any("/rest/api/3/search" in c for c in calls)
     assert any("/rest/api/2/search" in c for c in calls)
-    # Since live returned 0 issues, it falls back to MOCK_ISSUES gracefully
-    assert len(issues) == len(JiraTools.MOCK_ISSUES)
+    # Since live v2 returned 0 issues, it returns an empty list cleanly
+    assert issues == []
 
 
 @pytest.mark.asyncio
 async def test_jira_rate_limit_429_and_auth_failure_resilience():
-    """Test Jira 429 rate limit with Retry-After and 401 unauthorized fallback to MOCK_ISSUES."""
+    """Test Jira 429 rate limit with Retry-After returns empty list cleanly."""
     async def mock_jira_429(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, headers={"Retry-After": "30"}, text="Rate limit exceeded")
 
@@ -308,11 +305,10 @@ async def test_jira_rate_limit_429_and_auth_failure_resilience():
         with patch.object(settings, "jira_api_token", "invalid_token"):
             with patch("httpx.AsyncClient", mock_async_client_factory(mock_jira_429)):
                 issues = await JiraTools.get_sprint_issues()
-                assert len(issues) == len(JiraTools.MOCK_ISSUES)
+                assert issues == []
 
                 blocked = await JiraTools.get_blocked_issues()
-                assert len(blocked) >= 1
-                assert blocked[0]["key"] == "PROJ-108"
+                assert blocked == []
 
 
 # ============================================================================
@@ -376,15 +372,14 @@ async def test_slack_live_message_ingestion_and_user_resolution():
 
 @pytest.mark.asyncio
 async def test_slack_rate_limit_and_error_ratelimited_failover():
-    """Verify Slack 429 and error: 'ratelimited' responses trigger fallback to MOCK_MESSAGES."""
+    """Verify Slack 429 and error: 'ratelimited' responses return empty list cleanly."""
     async def mock_slack_ratelimit(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"ok": False, "error": "ratelimited"})
 
     with patch.object(settings, "slack_bot_token", "xox" + "b-test-token"):
         with patch("httpx.AsyncClient", mock_async_client_factory(mock_slack_ratelimit)):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
-            assert msgs[0]["id"] == "MSG-901"
+            assert msgs == []
 
 
 @pytest.mark.asyncio

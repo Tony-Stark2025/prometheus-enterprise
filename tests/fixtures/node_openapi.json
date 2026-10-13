@@ -1,0 +1,57 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Node.js Enterprise Multi-Tenant Benchmark Service",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/invoices/{id}": {
+      "get": {
+        "summary": "Retrieve invoice by ID",
+        "operationId": "getInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoice retrieved"
+          },
+          "404": {
+            "description": "Invoice not found"
+          }
+        }
+      }
+    },
+    "/api/v1/workspaces/{id}": {
+      "delete": {
+        "summary": "Delete workspace by ID",
+        "operationId": "deleteWorkspace",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace deleted"
+          },
+          "404": {
+            "description": "Workspace not found"
+          }
+        }
+      }
+    }
+  }
+}

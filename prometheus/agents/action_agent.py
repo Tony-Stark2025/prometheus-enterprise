@@ -26,114 +26,140 @@ class ActionAgent:
     ) -> List[ActionDraftRecord]:
         """
         Translates root-cause blockers into concrete human-reviewable action proposals.
+        Deduplicates against existing pending action drafts to avoid unbounded growth.
         """
         drafts: List[ActionDraftRecord] = []
+        existing_pending = await state_store.list_drafts(status=DraftStatus.PENDING)
+        pending_map = {
+            (d.context_blocker_id, d.action_type): d
+            for d in existing_pending
+            if d.context_blocker_id
+        }
 
         for blocker in blockers:
             # 1. Stale PR / reviewer ping proposal
-            pr_art = next((a for a in blocker.source_artifacts if a.startswith("PR-") or "#" in a), None)
+            pr_art = (
+                blocker.metadata.get("pr_id")
+                or next((a for a in blocker.source_artifacts if a.startswith("PR-") or "#" in a), None)
+            )
             if pr_art or blocker.severity in ("CRITICAL", "HIGH"):
-                pr_label = pr_art or "PR-102"
-                reviewer_target = "@david.kim"
-                if "reviewer(s)" in blocker.description:
-                    try:
-                        parts = blocker.description.split("reviewer(s)")
-                        if len(parts) > 1:
-                            r_name = parts[1].split(".")[0].strip().split()[0].strip(",")
-                            if r_name and not r_name.startswith("http"):
-                                reviewer_target = f"@{r_name}"
-                    except Exception:
-                        pass
+                existing = pending_map.get((blocker.blocker_id, "slack_direct_message"))
+                if existing:
+                    drafts.append(existing)
+                else:
+                    pr_label = pr_art or (blocker.source_artifacts[0] if blocker.source_artifacts else blocker.blocker_id)
+                    reviewers_meta = blocker.metadata.get("reviewers", [])
+                    if reviewers_meta and reviewers_meta[0] != "unassigned":
+                        reviewer_target = f"@{reviewers_meta[0].lstrip('@')}"
+                    elif blocker.metadata.get("assignee") and blocker.metadata["assignee"] != "unassigned":
+                        reviewer_target = f"@{str(blocker.metadata['assignee']).lstrip('@')}"
+                    else:
+                        reviewer_target = "@engineering-oncall"
+                        if "reviewer(s)" in blocker.description:
+                            try:
+                                parts = blocker.description.split("reviewer(s)")
+                                if len(parts) > 1:
+                                    r_name = parts[1].split(".")[0].strip().split()[0].strip(",")
+                                    if r_name and not r_name.startswith("http"):
+                                        reviewer_target = f"@{r_name}"
+                            except Exception:
+                                pass
 
-                ping_content = (
-                    f"Hi {reviewer_target}! 👋 {pr_label} is awaiting review and is currently stalling delivery "
-                    f"({blocker.title}). Could you please complete the review today to unblock the milestone? 🚀"
-                )
-                draft = await SlackTools.draft_action_card(
-                    target=reviewer_target,
-                    action_type="slack_direct_message",
-                    content=ping_content,
-                    context_blocker_id=blocker.blocker_id,
-                    require_confirmation=True,
-                )
-                # Enrich with Slack Block Kit JSON representation
-                draft.metadata["slack_blocks"] = [
-                    {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"🔔 *Prometheus Suggested Action: Review Request*"},
-                    },
-                    {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": ping_content},
-                    },
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": "Approve & Send"},
-                                "style": "primary",
-                                "value": draft.draft_id,
-                                "action_id": "approve_action",
-                            },
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": "Discard"},
-                                "style": "danger",
-                                "value": draft.draft_id,
-                                "action_id": "reject_action",
-                            },
-                        ],
-                    },
-                ]
-                await state_store.save_draft(draft)
-                drafts.append(draft)
+                    ping_content = (
+                        f"Hi {reviewer_target}! 👋 {pr_label} is awaiting review and is currently stalling delivery "
+                        f"({blocker.title}). Could you please complete the review today to unblock the milestone? 🚀"
+                    )
+                    draft = await SlackTools.draft_action_card(
+                        target=reviewer_target,
+                        action_type="slack_direct_message",
+                        content=ping_content,
+                        context_blocker_id=blocker.blocker_id,
+                        require_confirmation=True,
+                    )
+                    # Enrich with Slack Block Kit JSON representation
+                    draft.metadata["slack_blocks"] = [
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": f"🔔 *Prometheus Suggested Action: Review Request*"},
+                        },
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": ping_content},
+                        },
+                        {
+                            "type": "actions",
+                            "elements": [
+                                {
+                                    "type": "button",
+                                    "text": {"type": "plain_text", "text": "Approve & Send"},
+                                    "style": "primary",
+                                    "value": draft.draft_id,
+                                    "action_id": "approve_action",
+                                },
+                                {
+                                    "type": "button",
+                                    "text": {"type": "plain_text", "text": "Discard"},
+                                    "style": "danger",
+                                    "value": draft.draft_id,
+                                    "action_id": "reject_action",
+                                },
+                            ],
+                        },
+                    ]
+                    await state_store.save_draft(draft)
+                    pending_map[(blocker.blocker_id, "slack_direct_message")] = draft
+                    drafts.append(draft)
 
             # 2. Squad-wide delivery alert proposal
             if blocker.severity in ("CRITICAL", "HIGH"):
-                channel_alert = (
-                    f"⚠️ *Prometheus Blocker Alert [{blocker.blocker_id}]*:\n"
-                    f"{blocker.title}\n"
-                    f"Impact: Squads {', '.join(blocker.impacted_squads)}\n"
-                    f"Summary: {blocker.description}"
-                )
-                channel_draft = await SlackTools.draft_action_card(
-                    target="#platform-engineering",
-                    action_type="slack_channel_alert",
-                    content=channel_alert,
-                    context_blocker_id=blocker.blocker_id,
-                    require_confirmation=True,
-                )
-                channel_draft.metadata["slack_blocks"] = [
-                    {
-                        "type": "header",
-                        "text": {"type": "plain_text", "text": f"🚨 Critical Delivery Bottleneck [{blocker.blocker_id}]"},
-                    },
-                    {
-                        "type": "section",
-                        "text": {"type": "mrkdwn", "text": channel_alert},
-                    },
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": "Broadcast to Channel"},
-                                "style": "primary",
-                                "value": channel_draft.draft_id,
-                                "action_id": "approve_action",
-                            },
-                            {
-                                "type": "button",
-                                "text": {"type": "plain_text", "text": "Mute Alert"},
-                                "value": channel_draft.draft_id,
-                                "action_id": "reject_action",
-                            },
-                        ],
-                    },
-                ]
-                await state_store.save_draft(channel_draft)
-                drafts.append(channel_draft)
+                existing_alert = pending_map.get((blocker.blocker_id, "slack_channel_alert"))
+                if existing_alert:
+                    drafts.append(existing_alert)
+                else:
+                    channel_alert = (
+                        f"⚠️ *Prometheus Blocker Alert [{blocker.blocker_id}]*:\n"
+                        f"{blocker.title}\n"
+                        f"Impact: Squads {', '.join(blocker.impacted_squads)}\n"
+                        f"Summary: {blocker.description}"
+                    )
+                    channel_draft = await SlackTools.draft_action_card(
+                        target="#platform-engineering",
+                        action_type="slack_channel_alert",
+                        content=channel_alert,
+                        context_blocker_id=blocker.blocker_id,
+                        require_confirmation=True,
+                    )
+                    channel_draft.metadata["slack_blocks"] = [
+                        {
+                            "type": "header",
+                            "text": {"type": "plain_text", "text": f"🚨 Critical Delivery Bottleneck [{blocker.blocker_id}]"},
+                        },
+                        {
+                            "type": "section",
+                            "text": {"type": "mrkdwn", "text": channel_alert},
+                        },
+                        {
+                            "type": "actions",
+                            "elements": [
+                                {
+                                    "type": "button",
+                                    "text": {"type": "plain_text", "text": "Broadcast to Channel"},
+                                    "style": "primary",
+                                    "value": channel_draft.draft_id,
+                                    "action_id": "approve_action",
+                                },
+                                {
+                                    "type": "button",
+                                    "text": {"type": "plain_text", "text": "Mute Alert"},
+                                    "value": channel_draft.draft_id,
+                                    "action_id": "reject_action",
+                                },
+                            ],
+                        },
+                    ]
+                    await state_store.save_draft(channel_draft)
+                    pending_map[(blocker.blocker_id, "slack_channel_alert")] = channel_draft
+                    drafts.append(channel_draft)
 
         return drafts
 

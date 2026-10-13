@@ -4,8 +4,10 @@ Synthesizes public workstream chatter (Slack/Teams) to uncover informal blocker 
 """
 
 from typing import List, Dict, Any, Optional
+from prometheus.config import settings
 from prometheus.tools.slack_tools import SlackTools
 from prometheus.security.abac_guard import ABACGuard, UserContext
+from prometheus.mcp.client import mcp_client
 
 
 class WorkstreamAgent:
@@ -25,7 +27,10 @@ class WorkstreamAgent:
         """
         Gathers recent channel discussions filtered by ABAC scope.
         """
-        all_messages = await SlackTools.get_recent_channel_messages()
+        if settings.mcp_enabled:
+            all_messages = await mcp_client.fetch_slack_telemetry()
+        else:
+            all_messages = await SlackTools.get_recent_channel_messages()
         scoped_messages = ABACGuard.filter_resources(user, all_messages)
 
         return {

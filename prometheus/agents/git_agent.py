@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from prometheus.config import settings
 from prometheus.tools.github_tools import GitHubTools
 from prometheus.security.abac_guard import ABACGuard, UserContext
+from prometheus.mcp.client import mcp_client
 
 
 class GitAgent:
@@ -28,7 +29,10 @@ class GitAgent:
         Gathers PRs and CI status filtered by user org scope.
         """
         threshold = stale_threshold_hours if stale_threshold_hours is not None else float(settings.stale_pr_hours_threshold)
-        all_prs = await GitHubTools.get_open_pull_requests()
+        if settings.mcp_enabled:
+            all_prs = await mcp_client.fetch_github_telemetry()
+        else:
+            all_prs = await GitHubTools.get_open_pull_requests()
         # Enforce ABAC scope pre-filtering
         scoped_prs = ABACGuard.filter_resources(user, all_prs)
 

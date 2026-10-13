@@ -1,0 +1,125 @@
+name: "Prometheus Autonomous API Security Gate"
+description: "Autonomously verifies API vulnerabilities (BOLA/IDOR, BFLA) and synthesizes zero-regression patches in CI/CD"
+author: "Prometheus Enterprise"
+
+inputs:
+  target-url:
+    description: "Base URL of the running API service or preview environment"
+    required: true
+    default: "http://127.0.0.1:8000"
+  spec-path:
+    description: "Path to OpenAPI 3.0/3.1 or Swagger 2.0 JSON or YAML schema file"
+    required: false
+  spec-url:
+    description: "URL to OpenAPI specification JSON"
+    required: false
+  app-cmd:
+    description: "Optional background command to boot preview server (e.g. npm start or uvicorn app:main)"
+    required: false
+  fail-on-exploit:
+    description: "Whether to fail the CI/CD pipeline if a critical exploit is verified"
+    required: false
+    default: "true"
+  github-token:
+    description: "GitHub token to post PR review comments with reproduction commands and patches"
+    required: false
+    default: ${{ github.token }}
+  jwt-secret:
+    description: "JWT signing secret for dual-tenant token generation (optional)"
+    required: false
+
+outputs:
+  exploits-count:
+    description: "Number of confirmed, zero-false-positive exploits found"
+    value: ${{ steps.run-scan.outputs.exploits_count }}
+  patches-count:
+    description: "Number of certified AST code remediation patches generated"
+    value: ${{ steps.run-scan.outputs.patches_count }}
+  markdown-report:
+    description: "Path to generated GitHub PR Markdown report"
+    value: ${{ steps.run-scan.outputs.markdown_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Prometheus Pentest Engine
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install "${{ github.action_path }}"
+
+    - name: Execute Autonomous Exploit Verification Gate
+      id: run-scan
+      shell: bash
+      env:
+        INPUT_TARGET_URL: ${{ inputs.target-url }}
+        INPUT_SPEC_PATH: ${{ inputs.spec-path }}
+        INPUT_SPEC_URL: ${{ inputs.spec-url }}
+        INPUT_APP_CMD: ${{ inputs.app-cmd }}
+        INPUT_FAIL_ON_EXPLOIT: ${{ inputs.fail-on-exploit }}
+        INPUT_JWT_SECRET: ${{ inputs.jwt-secret }}
+      run: |
+        ARGS=(
+          "--target-url" "$INPUT_TARGET_URL"
+          "--output-markdown" "prometheus-pr-report.md"
+          "--output-diff" "prometheus-patch.diff"
+        )
+
+        if [ -n "$INPUT_SPEC_PATH" ]; then
+          ARGS+=("--spec" "$INPUT_SPEC_PATH")
+        elif [ -n "$INPUT_SPEC_URL" ]; then
+          ARGS+=("--spec-url" "$INPUT_SPEC_URL")
+        else
+          ARGS+=("--demo")
+        fi
+
+        if [ -n "$INPUT_APP_CMD" ]; then
+          ARGS+=("--app-cmd" "$INPUT_APP_CMD")
+        fi
+
+        if [ "$INPUT_FAIL_ON_EXPLOIT" = "true" ]; then
+          ARGS+=("--fail-on-exploit")
+        fi
+
+        if [ -n "$INPUT_JWT_SECRET" ]; then
+          ARGS+=("--jwt-secret" "$INPUT_JWT_SECRET")
+        fi
+
+        prometheus-scan "${ARGS[@]}"
+        EXIT_CODE=$?
+
+        echo "markdown_path=prometheus-pr-report.md" >> $GITHUB_OUTPUT
+        if [ ! -f prometheus-pr-report.md ]; then
+          touch prometheus-pr-report.md
+        fi
+        if ! grep -q "exploits_count=" "$GITHUB_OUTPUT" 2>/dev/null; then
+          echo "exploits_count=0" >> "$GITHUB_OUTPUT"
+        fi
+        if ! grep -q "patches_count=" "$GITHUB_OUTPUT" 2>/dev/null; then
+          echo "patches_count=0" >> "$GITHUB_OUTPUT"
+        fi
+        exit $EXIT_CODE
+
+    - name: Post PR Comment with Reproduction PoC and Patch
+      if: always() && github.event_name == 'pull_request' && inputs.github-token != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          if (fs.existsSync('prometheus-pr-report.md')) {
+            const report = fs.readFileSync('prometheus-pr-report.md', 'utf8');
+            if (report.trim().length > 0) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: report
+              });
+            }
+          }

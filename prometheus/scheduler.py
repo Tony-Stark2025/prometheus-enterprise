@@ -44,9 +44,22 @@ class PrometheusScheduler:
         while self._is_running:
             try:
                 now = datetime.now(timezone.utc)
-                # Check for 08:00 AM UTC (or trigger periodic interval digest)
-                logger.info(f"⏱️ [PrometheusScheduler] Running scheduled telemetry check at {now.isoformat()}...")
-                
+                # Calculate sleep duration until next 08:00 AM UTC briefing
+                target = now.replace(hour=8, minute=0, second=0, microsecond=0)
+                if now >= target:
+                    from datetime import timedelta
+                    target += timedelta(days=1)
+                seconds_until_target = (target - now).total_seconds()
+
+                # If interval is customized (e.g. fast testing mode), honor it; otherwise wait for next 08:00 AM UTC
+                wait_seconds = min(seconds_until_target, self._interval) if self._interval != 3600 else seconds_until_target
+                logger.info(f"⏱️ [PrometheusScheduler] Next 08:00 AM daily briefing scheduled in {wait_seconds:.0f}s (at {target.isoformat()}).")
+
+                await asyncio.sleep(wait_seconds)
+                if not self._is_running:
+                    break
+
+                logger.info("⏱️ [PrometheusScheduler] Triggering scheduled 08:00 AM daily alignment briefing...")
                 system_user = UserContext(
                     user_id="cron-system",
                     username="prometheus-cron",
@@ -55,10 +68,8 @@ class PrometheusScheduler:
                 )
                 await PrometheusWorkflow.run(
                     user=system_user,
-                    query="Daily scheduled alignment digest execution",
+                    query="Daily 08:00 AM scheduled alignment digest execution",
                 )
-
-                await asyncio.sleep(self._interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:

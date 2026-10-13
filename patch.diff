@@ -1,0 +1,21 @@
+--- a/app/api/invoices.py
++++ b/app/api/invoices.py
+@@ -1,6 +1,6 @@
+ @app.get("http://testserver/api/v1/invoices/inv-alpha-992")
+ async def get_invoice(invoice_id: str, current_user: UserSession = Depends(get_current_user)):
+     invoice = INVOICES_DB.get(invoice_id)
+-    if not invoice:
++    if not invoice or invoice.tenant_id != current_user.tenant_id:
+         raise HTTPException(status_code=404, detail="Invoice not found")
+     return invoice
+
+--- a/app/api/invoices.py
++++ b/app/api/invoices.py
+@@ -1,6 +1,6 @@
+ @app.get("http://testserver/api/v1/workspaces/ws-alpha-001")
+ async def get_invoice(invoice_id: str, current_user: UserSession = Depends(get_current_user)):
+     invoice = INVOICES_DB.get(invoice_id)
+-    if not invoice:
++    if not invoice or invoice.tenant_id != current_user.tenant_id:
+         raise HTTPException(status_code=404, detail="Invoice not found")
+     return invoice

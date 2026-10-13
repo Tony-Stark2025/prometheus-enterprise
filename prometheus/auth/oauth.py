@@ -73,8 +73,21 @@ async def exchange_google_code(code: str) -> Optional[Dict[str, Any]]:
             tokens = resp.json()
             id_token_jwt = tokens.get('id_token')
             if id_token_jwt:
-                user_info = jwt.decode(id_token_jwt, options={'verify_signature': False})
-                return user_info
+                try:
+                    from google.oauth2 import id_token
+                    from google.auth.transport import requests as google_requests
+                    user_info = id_token.verify_oauth2_token(
+                        id_token_jwt,
+                        google_requests.Request(),
+                        GOOGLE_CLIENT_ID or None,
+                    )
+                    return user_info
+                except Exception as verify_err:
+                    if os.getenv('ENVIRONMENT') == 'production':
+                        logger.error(f'Google ID token signature verification failed: {verify_err}')
+                        return None
+                    user_info = jwt.decode(id_token_jwt, options={'verify_signature': False})
+                    return user_info
     except Exception as e:
         logger.error(f'Exception during Google code exchange: {e}')
     return None

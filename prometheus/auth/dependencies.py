@@ -10,31 +10,33 @@ from prometheus.memory.firestore_store import firestore_store, UserProfile
 logger = logging.getLogger('prometheus.auth.dependencies')
 security_bearer = HTTPBearer(auto_error=False)
 
+from prometheus.config import settings
+
 class UserContext(BaseModel):
-    user_id: str = 'elena.lead'
-    email: str = 'elena.lead@acme.corp'
-    name: str = 'Elena Rostova'
+    user_id: str = 'anonymous'
+    email: str = 'anonymous@prometheus.internal'
+    name: str = 'Anonymous User'
     picture: Optional[str] = None
     tenant_id: str = 'default_enterprise'
-    roles: List[str] = Field(default_factory=lambda: ['lead', 'admin', 'chief_of_staff'])
-    org_scopes: List[str] = Field(default_factory=lambda: ['engineering', 'platform'])
+    roles: List[str] = Field(default_factory=list)
+    org_scopes: List[str] = Field(default_factory=list)
+    is_authenticated: bool = False
+
 
 async def get_current_user_optional(
     request: Request,
     auth_header: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)
 ) -> UserContext:
-    # 1. Check Authorization header
     token = None
     if auth_header:
         token = auth_header.credentials
-    # 2. Check Cookie
     if not token:
         token = request.cookies.get('session_token')
-    
+
     if token:
         payload = decode_session_token(token)
         if payload:
-            user_id = payload.get('sub', 'lead-01')
+            user_id = payload.get('sub', 'service-principal')
             user_profile = await firestore_store.get_user(user_id)
             if user_profile:
                 return UserContext(
@@ -44,19 +46,51 @@ async def get_current_user_optional(
                     picture=user_profile.picture,
                     tenant_id=user_profile.tenant_id,
                     roles=user_profile.roles,
-                    org_scopes=user_profile.org_scopes
+                    org_scopes=user_profile.org_scopes,
+                    is_authenticated=True,
                 )
             return UserContext(
                 user_id=user_id,
-                email=payload.get('email', 'alex.lead@enterprise.io'),
+                email=payload.get('email', 'service@prometheus.internal'),
                 tenant_id=payload.get('tenant_id', 'default_enterprise'),
-                org_scopes=payload.get('scopes', ['engineering', 'platform'])
+                roles=payload.get('roles', ['operator']),
+                org_scopes=payload.get('scopes', ['engineering', 'platform']),
+                is_authenticated=True,
             )
 
-    # Default fallback context for open trial / demo access
     return UserContext()
+
 
 async def get_current_user(
     user: UserContext = Depends(get_current_user_optional)
 ) -> UserContext:
+    if not user.is_authenticated:
+        if settings.environment == 'production':
+            raise HTTPException(status_code=401, detail='Authentication required: missing or invalid session credentials.')
+        # In non-production environments (development/testing), provide authenticated default context
+        return UserContext(
+            user_id='service-principal',
+            email='service@prometheus.internal',
+            name='Prometheus Service Principal',
+            tenant_id='default_enterprise',
+            roles=['operator'],
+            org_scopes=['engineering', 'platform'],
+            is_authenticated=True,
+        )
+    return user
+
+
+async def get_current_admin_user(
+    user: UserContext = Depends(get_current_user)
+) -> UserContext:
+    from prometheus.security.abac_engine import abac_engine
+    is_admin = 'admin' in user.roles or 'vp_engineering' in user.roles
+    if not is_admin:
+        abac_user = abac_engine.get_user(user.user_id)
+        if abac_user and abac_user.is_admin:
+            is_admin = True
+    if not is_admin:
+        allow_insecure = getattr(settings, 'allow_insecure_admin', False)
+        if not (allow_insecure and settings.environment in ('development', 'staging')):
+            raise HTTPException(status_code=403, detail='Forbidden: Administrative clearance required.')
     return user

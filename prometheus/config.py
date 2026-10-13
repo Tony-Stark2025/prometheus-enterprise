@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     host: str = "0.0.0.0"
     port: int = 8000
+    allow_insecure_admin: bool = False
 
     # Google Cloud & Vertex AI / Gemini Enterprise Agent Platform (Agent Engine)
     use_vertex_ai: bool = True
@@ -29,6 +30,22 @@ class Settings(BaseSettings):
     agent_engine_app_id: Optional[str] = None
     agent_engine_location: str = "us-central1"
     gemini_request_timeout_seconds: float = 8.0
+
+    # Multi-Provider LLM Integration (In-Service Subscriptions & BYOK)
+    llm_provider: str = "auto"  # 'auto', 'vertex', 'gemini', 'anthropic', 'openai', 'copilot', 'gateway'
+    llm_model: Optional[str] = None  # Explicit override; defaults to provider-optimal model
+    llm_request_timeout_seconds: float = 8.0
+
+    # BYOK (Bring Your Own Key) Direct Credentials
+    gemini_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+    # In-Service Subscriptions & Enterprise Gateways
+    copilot_token: Optional[str] = None
+    copilot_base_url: str = "https://api.githubcopilot.com"
+    ai_gateway_url: Optional[str] = None
+    ai_gateway_token: Optional[str] = None
 
     # Unified Foundation Model (Standardized exclusively on Gemini 3.7 Flash)
     gemini_model: str = "gemini-3.7-flash"
@@ -56,17 +73,13 @@ class Settings(BaseSettings):
 
     # External Integrations
     github_token: Optional[str] = None
-    github_repos: Union[List[str], str] = Field(
-        default_factory=lambda: ["acme/auth-service", "acme/web-gateway", "acme/billing-core"]
-    )
+    github_repos: Union[List[str], str] = Field(default_factory=list)
     jira_api_token: Optional[str] = None
     jira_instance_url: Optional[str] = None
     jira_user_email: Optional[str] = None
     jira_project_key: Optional[str] = None
     slack_bot_token: Optional[str] = None
-    slack_channels: Union[List[str], str] = Field(
-        default_factory=lambda: ["platform-engineering", "billing-squad"]
-    )
+    slack_channels: Union[List[str], str] = Field(default_factory=list)
 
     @field_validator("default_org_scope", "github_repos", "slack_channels", mode="after")
     @classmethod
@@ -113,7 +126,19 @@ class Settings(BaseSettings):
         except Exception:
             return value
 
-    @field_validator("github_token", "jira_api_token", "jira_instance_url", "jira_user_email", "slack_bot_token", mode="before")
+    @field_validator(
+        "github_token",
+        "jira_api_token",
+        "jira_instance_url",
+        "jira_user_email",
+        "slack_bot_token",
+        "gemini_api_key",
+        "anthropic_api_key",
+        "openai_api_key",
+        "copilot_token",
+        "ai_gateway_token",
+        mode="before",
+    )
     @classmethod
     def empty_str_to_none(cls, v: Any) -> Optional[str]:
         if isinstance(v, str) and not v.strip():

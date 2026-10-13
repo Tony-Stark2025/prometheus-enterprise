@@ -1,0 +1,32 @@
+name: "Prometheus API Security PR Gate"
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  prometheus-gate:
+    name: "Prometheus Autonomous API Exploit Gate"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Spin Up Application Preview Service
+        run: |
+          echo "Starting application preview service in background..."
+          # e.g. docker compose up -d or uvicorn app:app --port 8000 &
+
+      - name: Run Prometheus Autonomous Exploit Gate
+        uses: ./
+        with:
+          target-url: "http://127.0.0.1:8000"
+          spec-path: "openapi.json"
+          fail-on-exploit: "true"
+          github-token: ${{ secrets.GITHUB_TOKEN }}

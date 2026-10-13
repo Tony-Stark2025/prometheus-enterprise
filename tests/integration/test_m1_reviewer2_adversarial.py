@@ -50,34 +50,34 @@ async def test_config_resilient_parsing_and_normalization():
 @pytest.mark.asyncio
 async def test_github_adversarial_matrix():
     """Adversarially test GitHub tool under token states, rate limits, network errors, and live responses."""
-    # 1. Unauthenticated fallback
+    # 1. Unauthenticated returns empty list (zero mock fallback)
     with patch("prometheus.config.settings.github_token", None):
         prs = await GitHubTools.get_open_pull_requests()
-        assert len(prs) == len(GitHubTools.MOCK_PRS)
+        assert prs == []
         ci = await GitHubTools.get_ci_pipeline_failures()
-        assert len(ci) == 1
+        assert ci == []
 
-    # 2. HTTP 429 Rate limit
+    # 2. HTTP 429 Rate limit returns empty list
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(429, headers={"Retry-After": "60"})):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == len(GitHubTools.MOCK_PRS)
+            assert prs == []
             ci = await GitHubTools.get_ci_pipeline_failures()
-            assert len(ci) == 1
+            assert ci == []
 
-    # 3. Secondary Rate limit 403 / remaining == 0
+    # 3. Secondary Rate limit 403 / remaining == 0 returns empty list
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(403, headers={"x-ratelimit-remaining": "0"})):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == len(GitHubTools.MOCK_PRS)
+            assert prs == []
 
-    # 4. Network exception / timeout
+    # 4. Network exception / timeout returns empty list
     with patch("prometheus.config.settings.github_token", "mock_token"):
         with patch("httpx.AsyncClient.get", side_effect=httpx.ConnectTimeout("Connection timeout")):
             prs = await GitHubTools.get_open_pull_requests()
-            assert len(prs) == len(GitHubTools.MOCK_PRS)
+            assert prs == []
             ci = await GitHubTools.get_ci_pipeline_failures()
-            assert len(ci) == 1
+            assert ci == []
 
     # 5. Live parsing simulation with standard PR-### and PROJ-### tags
     mock_live_pulls = [
@@ -120,12 +120,12 @@ async def test_github_adversarial_matrix():
 @pytest.mark.asyncio
 async def test_jira_adversarial_matrix():
     """Adversarially test Jira tool under missing creds, 429s, ADF doc formats, and link types."""
-    # 1. Unauthenticated fallback
+    # 1. Unauthenticated returns empty list
     with patch("prometheus.config.settings.jira_instance_url", None):
         issues = await JiraTools.get_sprint_issues()
-        assert len(issues) == len(JiraTools.MOCK_ISSUES)
+        assert issues == []
         blocked = await JiraTools.get_blocked_issues()
-        assert len(blocked) >= 1
+        assert blocked == []
 
     # 2. Basic Auth vs Bearer header generation
     with patch("prometheus.config.settings.jira_instance_url", "https://jira.acme.com"):
@@ -140,12 +140,12 @@ async def test_jira_adversarial_matrix():
                 headers2 = JiraTools._get_auth_headers()
                 assert headers2["Authorization"] == "Bearer bearer_token"
 
-    # 3. HTTP 429 Rate Limit
+    # 3. HTTP 429 Rate Limit returns empty list
     with patch("prometheus.config.settings.jira_instance_url", "https://jira.acme.com"):
         with patch("prometheus.config.settings.jira_api_token", "secret_token"):
             with patch("httpx.AsyncClient.get", return_value=httpx.Response(429, headers={"Retry-After": "30"})):
                 issues = await JiraTools.get_sprint_issues()
-                assert len(issues) == len(JiraTools.MOCK_ISSUES)
+                assert issues == []
 
     # 4. Live parsing simulation with ADF description and issue links
     mock_jira_issues = {
@@ -192,21 +192,21 @@ async def test_slack_adversarial_matrix():
     """Adversarially test Slack tool under token absence, rate limits, user resolution, and action dispatch."""
     await state_store.init_db()
 
-    # 1. Unauthenticated fallback
+    # 1. Unauthenticated returns empty list
     with patch("prometheus.config.settings.slack_bot_token", None):
         msgs = await SlackTools.get_recent_channel_messages()
-        assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
+        assert msgs == []
 
-    # 2. Rate limit fallback
+    # 2. Rate limit returns empty list
     with patch("prometheus.config.settings.slack_bot_token", "xox" + "b-token"):
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(429)):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
+            assert msgs == []
         with patch("httpx.AsyncClient.get", return_value=httpx.Response(200, json={"ok": False, "error": "ratelimited"})):
             msgs = await SlackTools.get_recent_channel_messages()
-            assert len(msgs) == len(SlackTools.MOCK_MESSAGES)
+            assert msgs == []
 
-    # 3. Action Drafting & Idempotent Approval
+    # 3. Action Drafting & Unconfigured Token Handling
     draft = await SlackTools.draft_action_card(
         target="@alex-lead",
         action_type="slack_dm",
@@ -216,12 +216,11 @@ async def test_slack_adversarial_matrix():
     assert draft.status == DraftStatus.PENDING
 
     with patch("prometheus.config.settings.slack_bot_token", None):
-        res1 = await SlackTools.dispatch_approved_action(draft.draft_id, "admin-user")
-        assert res1["status"] == "success"
-        res2 = await SlackTools.dispatch_approved_action(draft.draft_id, "admin-user")
-        assert res2["status"] == "already_executed"
+        res_unconf = await SlackTools.dispatch_approved_action(draft.draft_id, "admin-user")
+        assert res_unconf["status"] == "success"
+        assert "Slack token unconfigured" in res_unconf["result"]
 
-    # 4. Live Slack dispatch with Block Kit & channel resolution
+    # 4. Live Slack dispatch with Block Kit, channel resolution, and idempotency
     draft_live = await SlackTools.draft_action_card(
         target="#platform-engineering",
         action_type="slack_channel_alert",
@@ -232,25 +231,28 @@ async def test_slack_adversarial_matrix():
             with patch("httpx.AsyncClient.post", return_value=httpx.Response(200, json={"ok": True, "ts": "1690000000.1234"})):
                 live_dispatch = await SlackTools.dispatch_approved_action(draft_live.draft_id, "approver")
                 assert live_dispatch["status"] == "success"
+                repeat_dispatch = await SlackTools.dispatch_approved_action(draft_live.draft_id, "approver")
+                assert repeat_dispatch["status"] == "already_executed"
 
 
 @pytest.mark.asyncio
 async def test_app_and_prometheus_namespace_parity():
-    """Verify both app.tools and prometheus.tools operate identically without circular import issues."""
-    with patch("app.config.settings.github_token", None), patch("prometheus.config.settings.github_token", None):
-        app_prs = await AppGH.get_open_pull_requests()
-        prom_prs = await GitHubTools.get_open_pull_requests()
-        assert len(app_prs) == len(prom_prs)
-        assert len(app_prs) >= 3
+    """Verify both app.tools and prometheus.tools resolve to identical classes and results."""
+    assert AppGH is GitHubTools
+    assert AppJira is JiraTools
+    assert AppSlack is SlackTools
 
-    with patch("app.config.settings.jira_instance_url", None), patch("prometheus.config.settings.jira_instance_url", None):
-        app_issues = await AppJira.get_sprint_issues()
-        prom_issues = await JiraTools.get_sprint_issues()
-        assert len(app_issues) == len(prom_issues)
-        assert len(app_issues) >= 3
+    app_prs = await AppGH.get_open_pull_requests()
+    prom_prs = await GitHubTools.get_open_pull_requests()
+    assert len(app_prs) == len(prom_prs)
+    assert len(app_prs) >= 3
 
-    with patch("app.config.settings.slack_bot_token", None), patch("prometheus.config.settings.slack_bot_token", None):
-        app_msgs = await AppSlack.get_recent_channel_messages()
-        prom_msgs = await SlackTools.get_recent_channel_messages()
-        assert len(app_msgs) == len(prom_msgs)
-        assert len(app_msgs) >= 3
+    app_issues = await AppJira.get_sprint_issues()
+    prom_issues = await JiraTools.get_sprint_issues()
+    assert len(app_issues) == len(prom_issues)
+    assert len(app_issues) >= 3
+
+    app_msgs = await AppSlack.get_recent_channel_messages()
+    prom_msgs = await SlackTools.get_recent_channel_messages()
+    assert len(app_msgs) == len(prom_msgs)
+    assert len(app_msgs) >= 3

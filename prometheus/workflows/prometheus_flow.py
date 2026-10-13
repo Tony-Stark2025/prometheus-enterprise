@@ -56,6 +56,8 @@ class PrometheusWorkflow:
                 raw_telemetry={},
             )
 
+        sanitized_query = router_res.get("sanitized_query", query)
+
         # Step 2: Concurrent Ingestion Fan-Out (Git, Jira, Workstream)
         git_task = GitAgent.collect_telemetry(user)
         jira_task = JiraAgent.collect_telemetry(user)
@@ -85,7 +87,7 @@ class PrometheusWorkflow:
             session_id=session_id,
             state_data={
                 "user": user.model_dump(),
-                "query": query,
+                "query": sanitized_query,
                 "blockers": [b.model_dump() for b in blockers],
                 "draft_ids": [d.draft_id for d in action_drafts],
                 "digest": digest,

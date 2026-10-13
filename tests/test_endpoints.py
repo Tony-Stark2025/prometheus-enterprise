@@ -257,12 +257,25 @@ async def test_documentation_and_auth_endpoints():
         assert res_glogin.status_code == 200
         assert "auth_url" in res_glogin.json()
 
-        # 4. Demo login endpoint
+        # 4. Verify demo-login endpoint is removed (404) and test ABAC registration endpoints
         res_demo = await ac.post("/api/v1/auth/demo-login")
-        assert res_demo.status_code == 200
-        data_demo = res_demo.json()
-        assert data_demo["status"] == "authenticated"
-        assert "token" in data_demo
+        assert res_demo.status_code == 404
+
+        res_abac_user = await ac.post(
+            "/api/v1/security/abac/users",
+            json={
+                "user_id": "test.engineer",
+                "username": "test.engineer",
+                "email": "test.engineer@enterprise.io",
+                "department": "engineering",
+                "clearance_level": "L4",
+                "assigned_squads": ["platform"],
+                "roles": ["staff_engineer"],
+                "is_admin": False,
+            },
+        )
+        assert res_abac_user.status_code == 200
+        assert res_abac_user.json()["user_id"] == "test.engineer"
 
         # 5. Integrations API (list, save, delete)
         res_int_list = await ac.get("/api/v1/integrations")

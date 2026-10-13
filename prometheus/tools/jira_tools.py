@@ -1,7 +1,8 @@
 """
 Jira and Linear project management telemetry tools for Prometheus.
 Tracks issue status, sprint blockers, epic dependencies, and burndown risks
-via live Jira Cloud REST API with rate limiting and hermetic mock fallbacks.
+via live Jira Cloud REST API with Firestore Vault & Secret Manager credential resolution.
+Zero mock or synthetic fallback data.
 """
 
 import base64
@@ -12,12 +13,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import httpx
 
-try:
-    from prometheus.config import settings
-    from prometheus.memory.firestore_store import firestore_store
-except ImportError:
-    from app.config import settings
-    from app.memory.firestore_store import firestore_store
+from prometheus.config import settings
+from prometheus.memory.firestore_store import firestore_store
 
 logger = logging.getLogger(__name__)
 
@@ -29,26 +26,57 @@ class JiraTools:
     """
 
     @classmethod
-    async def _get_sandbox_issues(cls, tenant_id: str = "default_enterprise") -> List[Dict[str, Any]]:
-        """Loads sandbox Jira issues dynamically from Google Cloud Firestore."""
-        return await firestore_store.get_sandbox_telemetry(tenant_id=tenant_id, telemetry_type="issues")
+    async def _resolve_credentials(
+        cls,
+        tenant_id: str = "default_enterprise",
+    ) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+        """Resolves Jira URL, token, email, and project key from Firestore Vault or settings."""
+        vault_cfg = await firestore_store.get_integration(tenant_id, "jira") or {}
+        instance_url = (
+            vault_cfg.get("jira_instance_url")
+            or vault_cfg.get("instance_url")
+            or vault_cfg.get("url")
+            or settings.jira_instance_url
+        )
+        api_token = (
+            vault_cfg.get("jira_api_token")
+            or vault_cfg.get("api_token")
+            or vault_cfg.get("token")
+            or settings.jira_api_token
+        )
+        user_email = (
+            vault_cfg.get("jira_user_email")
+            or vault_cfg.get("user_email")
+            or vault_cfg.get("email")
+            or settings.jira_user_email
+        )
+        project_key = (
+            vault_cfg.get("jira_project_key")
+            or vault_cfg.get("project_key")
+            or settings.jira_project_key
+        )
+        return instance_url, api_token, user_email, project_key
 
     @classmethod
-    def _get_auth_headers(cls) -> Dict[str, str]:
+    def _get_auth_headers(
+        cls,
+        token: Optional[str] = None,
+        email: Optional[str] = None,
+    ) -> Dict[str, str]:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": "Prometheus-Observability-Fleet/1.1",
         }
-        token = settings.jira_api_token
-        email = settings.jira_user_email
+        resolved_token = token if token is not None else settings.jira_api_token
+        resolved_email = email if email is not None else settings.jira_user_email
 
-        if token and email:
-            auth_str = f"{email}:{token}"
+        if resolved_token and resolved_email:
+            auth_str = f"{resolved_email}:{resolved_token}"
             encoded = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
             headers["Authorization"] = f"Basic {encoded}"
-        elif token:
-            headers["Authorization"] = f"Bearer {token}"
+        elif resolved_token:
+            headers["Authorization"] = f"Bearer {resolved_token}"
 
         return headers
 
@@ -104,11 +132,10 @@ class JiraTools:
                     blocked_by.add(outward_issue["key"])
                     reasons.append(f"Blocked by {outward_issue['key']}: {outward_issue.get('fields', {}).get('summary', '')}")
 
-        # 2. Extract Cross-Domain PR references (e.g. PR-402, PR-415, #402) from summary, description, comments
+        # 2. Extract Cross-Domain PR references (e.g. PR-402, PR-415, #402)
         summary = fields.get("summary", "")
         desc = fields.get("description", "")
         if isinstance(desc, dict):
-            # Atlassian Document Format (ADF) handling: extract string content
             desc = str(desc)
 
         combined_text = f"{summary} {desc}"
@@ -134,7 +161,6 @@ class JiraTools:
         elif isinstance(sprint_field, list) and sprint_field:
             return sprint_field[-1].get("name", "Active Sprint")
 
-        # Scan custom fields for sprint dict or string
         for k, v in fields.items():
             if k.startswith("customfield_") and v:
                 if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict) and "name" in v[0] and "sprint" in k.lower():
@@ -142,32 +168,33 @@ class JiraTools:
                 elif isinstance(v, dict) and "name" in v and "sprint" in k.lower():
                     return v["name"]
 
-        return "Sprint 24 - Core Platform"
+        return "Active Sprint"
 
     @classmethod
     async def get_sprint_issues(
         cls,
         scopes: Optional[List[str]] = None,
         jql: Optional[str] = None,
+        tenant_id: str = "default_enterprise",
     ) -> List[Dict[str, Any]]:
         """
         Fetches active sprint issues, epics, and blocker dependencies via live Jira Cloud REST API.
-        Gracefully falls back to realistic mock fixtures if unauthenticated or rate limited.
+        Returns an empty list if Jira credentials are not configured or API fails.
         """
-        if not settings.jira_instance_url or not settings.jira_api_token:
-            issues = await cls._get_sandbox_issues()
-            if scopes:
-                return [i for i in issues if any(s in i.get("scopes", []) for s in scopes)]
-            return issues
+        instance_url, api_token, user_email, project_key = await cls._resolve_credentials(tenant_id=tenant_id)
+        if not instance_url or not api_token:
+            logger.info("Jira credentials not configured; returning empty issue list.")
+            return []
 
-        instance_url = settings.jira_instance_url.rstrip("/")
+        base_url = instance_url.rstrip("/")
         if jql:
             query_jql = jql
-        elif settings.jira_project_key:
-            query_jql = f"project = {settings.jira_project_key} ORDER BY updated DESC"
+        elif project_key:
+            query_jql = f"project = {project_key} ORDER BY updated DESC"
         else:
             query_jql = "sprint in openSprints() ORDER BY priority DESC, updated DESC"
 
+        headers = cls._get_auth_headers(token=api_token, email=user_email)
         live_issues: List[Dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -176,32 +203,24 @@ class JiraTools:
                     "fields": "summary,status,issuetype,priority,sprint,assignee,reporter,issuelinks,duedate,labels,description",
                     "maxResults": 50,
                 }
-                search_url = f"{instance_url}/rest/api/3/search/jql"
-                resp = await client.get(search_url, headers=cls._get_auth_headers(), params=params)
+                search_url = f"{base_url}/rest/api/3/search/jql"
+                resp = await client.get(search_url, headers=headers, params=params)
 
-                # If search/jql returns 400, 404, or 410, fallback to legacy search endpoints
                 if resp.status_code in (400, 404, 410):
-                    search_url = f"{instance_url}/rest/api/3/search"
-                    resp = await client.get(search_url, headers=cls._get_auth_headers(), params=params)
+                    search_url = f"{base_url}/rest/api/3/search"
+                    resp = await client.get(search_url, headers=headers, params=params)
                     if resp.status_code in (404, 410):
-                        search_url = f"{instance_url}/rest/api/2/search"
-                        resp = await client.get(search_url, headers=cls._get_auth_headers(), params=params)
+                        search_url = f"{base_url}/rest/api/2/search"
+                        resp = await client.get(search_url, headers=headers, params=params)
 
-                # Rate Limit Handling (HTTP 429)
                 if resp.status_code == 429:
                     retry_after = resp.headers.get("Retry-After", "unknown")
-                    logger.warning(f"Jira API 429 Rate Limit (Retry-After: {retry_after}s). Failing over to sandbox issues.")
-                    sandbox_issues = await cls._get_sandbox_issues()
-                    return sandbox_issues if not scopes else [
-                        i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
-                    ]
+                    logger.warning(f"Jira API 429 Rate Limit (Retry-After: {retry_after}s).")
+                    return []
 
                 if resp.status_code != 200:
-                    logger.warning(f"Jira API search failed with status HTTP {resp.status_code}: {resp.text}")
-                    sandbox_issues = await cls._get_sandbox_issues()
-                    return sandbox_issues if not scopes else [
-                        i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
-                    ]
+                    logger.warning(f"Jira API search failed with status HTTP {resp.status_code}")
+                    return []
 
                 data = resp.json()
                 raw_issues = data.get("issues", [])
@@ -217,7 +236,6 @@ class JiraTools:
                     status_obj = fields.get("status") or {}
                     raw_status = (status_obj.get("name") or "IN_PROGRESS").upper()
 
-                    # Normalize status
                     if "BLOCK" in raw_status:
                         status = "BLOCKED"
                     elif "PROGRESS" in raw_status or "DEVELOPMENT" in raw_status:
@@ -249,7 +267,6 @@ class JiraTools:
                     blocked_by, blocker_reason = cls._parse_blockers_and_dependencies(issue)
                     labels = fields.get("labels", [])
                     scopes_inferred = cls._infer_scopes(labels, key, summary)
-
                     due_date = fields.get("duedate") or (datetime.now(timezone.utc) + timedelta(days=3)).strftime("%Y-%m-%d")
 
                     issue_record = {
@@ -268,34 +285,25 @@ class JiraTools:
                     }
                     live_issues.append(issue_record)
 
-            if live_issues:
-                if scopes:
-                    return [i for i in live_issues if any(s in i.get("scopes", []) for s in scopes)]
-                return live_issues
-
-            logger.info("No live Jira issues returned; fetching sandbox telemetry from Firestore.")
-            sandbox_issues = await cls._get_sandbox_issues()
-            return sandbox_issues if not scopes else [
-                i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
-            ]
+            if scopes:
+                return [i for i in live_issues if any(s in i.get("scopes", []) for s in scopes)]
+            return live_issues
 
         except Exception as exc:
-            logger.error(f"Live Jira query failed with exception: {exc}. Using sandbox fallback.")
-            sandbox_issues = await cls._get_sandbox_issues()
-            return sandbox_issues if not scopes else [
-                i for i in sandbox_issues if any(s in i.get("scopes", []) for s in scopes)
-            ]
+            logger.error(f"Live Jira query failed: {exc}")
+            return []
 
     @classmethod
     async def get_blocked_issues(
         cls,
         scopes: Optional[List[str]] = None,
         jql: Optional[str] = None,
+        tenant_id: str = "default_enterprise",
     ) -> List[Dict[str, Any]]:
         """
         Filters issues in blocked status or with active dependency links.
         """
-        all_issues = await cls.get_sprint_issues(scopes=scopes, jql=jql)
+        all_issues = await cls.get_sprint_issues(scopes=scopes, jql=jql, tenant_id=tenant_id)
         return [
             issue for issue in all_issues
             if issue.get("status") == "BLOCKED" or len(issue.get("blocked_by", [])) > 0

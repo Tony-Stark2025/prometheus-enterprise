@@ -6,6 +6,8 @@ Tracks blocker lifecycles and human approval states across sessions with durable
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any
+from contextlib import asynccontextmanager
+import asyncio
 import json
 import logging
 import aiosqlite
@@ -60,60 +62,84 @@ class StateStore:
         self._blockers: Dict[str, BlockerRecord] = {}
         self._drafts: Dict[str, ActionDraftRecord] = {}
         self._checkpoints: Dict[str, Dict[str, Any]] = {}
+        self._lock_obj: Optional[asyncio.Lock] = None
+        self._lock_loop: Optional[asyncio.AbstractEventLoop] = None
         self._initialized = False
+
+    @property
+    def _lock(self) -> asyncio.Lock:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.Lock()
+        if self._lock_obj is None or self._lock_loop != loop:
+            self._lock_obj = asyncio.Lock()
+            self._lock_loop = loop
+        return self._lock_obj
+
+    @asynccontextmanager
+    async def _get_db(self):
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute("PRAGMA busy_timeout=5000;")
+            yield db
 
     async def init_db(self):
         """Creates the required tables in SQLite if they don't exist."""
         if self._initialized:
             return
-        try:
-            async with aiosqlite.connect(self._db_path) as db:
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS blockers (
-                        blocker_id TEXT PRIMARY KEY,
-                        title TEXT NOT NULL,
-                        description TEXT,
-                        severity TEXT,
-                        source_artifacts TEXT,
-                        impacted_squads TEXT,
-                        detected_at TEXT,
-                        resolved_at TEXT,
-                        is_active INTEGER,
-                        metadata TEXT
-                    )
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS action_drafts (
-                        draft_id TEXT PRIMARY KEY,
-                        target_channel_or_user TEXT NOT NULL,
-                        action_type TEXT NOT NULL,
-                        content TEXT,
-                        context_blocker_id TEXT,
-                        created_at TEXT,
-                        status TEXT,
-                        approved_by TEXT,
-                        approved_at TEXT,
-                        execution_result TEXT,
-                        metadata TEXT
-                    )
-                """)
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS checkpoints (
-                        session_id TEXT PRIMARY KEY,
-                        timestamp TEXT NOT NULL,
-                        state_data TEXT NOT NULL
-                    )
-                """)
-                await db.commit()
-            self._initialized = True
-            logger.info(f"🗄️ [StateStore] Persistent SQLite store initialized at '{self._db_path}'.")
-        except Exception as e:
-            logger.warning(f"⚠️ [StateStore] SQLite init warning ({e}); operating with in-memory store.")
+        async with self._lock:
+            if self._initialized:
+                return
+            try:
+                async with self._get_db() as db:
+                    await db.execute("PRAGMA journal_mode=WAL;")
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS blockers (
+                            blocker_id TEXT PRIMARY KEY,
+                            title TEXT NOT NULL,
+                            description TEXT,
+                            severity TEXT,
+                            source_artifacts TEXT,
+                            impacted_squads TEXT,
+                            detected_at TEXT,
+                            resolved_at TEXT,
+                            is_active INTEGER,
+                            metadata TEXT
+                        )
+                    """)
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS action_drafts (
+                            draft_id TEXT PRIMARY KEY,
+                            target_channel_or_user TEXT NOT NULL,
+                            action_type TEXT NOT NULL,
+                            content TEXT,
+                            context_blocker_id TEXT,
+                            created_at TEXT,
+                            status TEXT,
+                            approved_by TEXT,
+                            approved_at TEXT,
+                            execution_result TEXT,
+                            metadata TEXT
+                        )
+                    """)
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS checkpoints (
+                            session_id TEXT PRIMARY KEY,
+                            timestamp TEXT NOT NULL,
+                            state_data TEXT NOT NULL
+                        )
+                    """)
+                    await db.commit()
+                self._initialized = True
+                logger.info(f"🗄️ [StateStore] Persistent SQLite store initialized at '{self._db_path}'.")
+            except Exception as e:
+                logger.warning(f"⚠️ [StateStore] SQLite init warning ({e}); operating with in-memory store.")
 
     async def save_blocker(self, blocker: BlockerRecord) -> BlockerRecord:
-        self._blockers[blocker.blocker_id] = blocker
+        async with self._lock:
+            self._blockers[blocker.blocker_id] = blocker
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 await db.execute("""
                     INSERT OR REPLACE INTO blockers (
                         blocker_id, title, description, severity, source_artifacts,
@@ -136,13 +162,13 @@ class StateStore:
             logger.debug(f"[StateStore] DB write blocker fallback ({e})")
         return blocker
 
-    async def get_active_blockers(self) -> List[BlockerRecord]:
+    async def get_active_blockers(self, scopes: Optional[List[str]] = None) -> List[BlockerRecord]:
+        results: List[BlockerRecord] = []
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 db.row_factory = aiosqlite.Row
                 async with db.execute("SELECT * FROM blockers WHERE is_active = 1") as cursor:
                     rows = await cursor.fetchall()
-                    results = []
                     for row in rows:
                         results.append(BlockerRecord(
                             blocker_id=row["blocker_id"],
@@ -156,15 +182,21 @@ class StateStore:
                             is_active=bool(row["is_active"]),
                             metadata=json.loads(row["metadata"] or "{}"),
                         ))
-                    return results
         except Exception as e:
             logger.debug(f"[StateStore] DB read active blockers fallback ({e})")
-        return [b for b in self._blockers.values() if b.is_active]
+            async with self._lock:
+                results = [b for b in self._blockers.values() if b.is_active]
+
+        if scopes:
+            scope_set = set(scopes)
+            return [b for b in results if set(b.impacted_squads) & scope_set]
+        return results
 
     async def save_draft(self, draft: ActionDraftRecord) -> ActionDraftRecord:
-        self._drafts[draft.draft_id] = draft
+        async with self._lock:
+            self._drafts[draft.draft_id] = draft
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 await db.execute("""
                     INSERT OR REPLACE INTO action_drafts (
                         draft_id, target_channel_or_user, action_type, content,
@@ -191,7 +223,7 @@ class StateStore:
 
     async def get_draft(self, draft_id: str) -> Optional[ActionDraftRecord]:
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 db.row_factory = aiosqlite.Row
                 async with db.execute("SELECT * FROM action_drafts WHERE draft_id = ?", (draft_id,)) as cursor:
                     row = await cursor.fetchone()
@@ -212,11 +244,16 @@ class StateStore:
                     return None
         except Exception as e:
             logger.debug(f"[StateStore] DB read draft fallback ({e})")
-        return self._drafts.get(draft_id)
+        async with self._lock:
+            return self._drafts.get(draft_id)
 
-    async def list_drafts(self, status: Optional[DraftStatus] = None) -> List[ActionDraftRecord]:
+    async def list_drafts(
+        self,
+        status: Optional[DraftStatus] = None,
+        scopes: Optional[List[str]] = None,
+    ) -> List[ActionDraftRecord]:
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 db.row_factory = aiosqlite.Row
                 query = "SELECT * FROM action_drafts"
                 params = ()
@@ -240,12 +277,28 @@ class StateStore:
                             execution_result=row["execution_result"],
                             metadata=json.loads(row["metadata"] or "{}"),
                         ))
+                    if scopes:
+                        scope_set = set(scopes)
+                        filtered_results = []
+                        for d in results:
+                            d_scopes = set(d.metadata.get("scopes", []))
+                            if not d_scopes and d.context_blocker_id:
+                                async with self._lock:
+                                    b = self._blockers.get(d.context_blocker_id)
+                                if b:
+                                    d_scopes = set(b.impacted_squads)
+                            if not d_scopes or (d_scopes & scope_set):
+                                filtered_results.append(d)
+                        return filtered_results
                     return results
         except Exception as e:
             logger.debug(f"[StateStore] DB list drafts fallback ({e})")
-        if status:
-            return [d for d in self._drafts.values() if d.status == status]
-        return list(self._drafts.values())
+        async with self._lock:
+            res = [d for d in self._drafts.values() if d.status == status] if status else list(self._drafts.values())
+        if scopes:
+            scope_set = set(scopes)
+            res = [d for d in res if not d.metadata.get("scopes") or (set(d.metadata.get("scopes", [])) & scope_set)]
+        return res
 
     async def update_draft_status(
         self, draft_id: str, status: DraftStatus, approver: Optional[str] = None, result: Optional[str] = None
@@ -281,13 +334,14 @@ class StateStore:
 
     async def save_checkpoint(self, session_id: str, state_data: Dict[str, Any]) -> None:
         ts = datetime.now(timezone.utc).isoformat()
-        self._checkpoints[session_id] = {
-            "session_id": session_id,
-            "timestamp": ts,
-            "data": state_data,
-        }
+        async with self._lock:
+            self._checkpoints[session_id] = {
+                "session_id": session_id,
+                "timestamp": ts,
+                "data": state_data,
+            }
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 await db.execute("""
                     INSERT OR REPLACE INTO checkpoints (session_id, timestamp, state_data)
                     VALUES (?, ?, ?)
@@ -298,7 +352,7 @@ class StateStore:
 
     async def get_checkpoint(self, session_id: str) -> Optional[Dict[str, Any]]:
         try:
-            async with aiosqlite.connect(self._db_path) as db:
+            async with self._get_db() as db:
                 db.row_factory = aiosqlite.Row
                 async with db.execute("SELECT * FROM checkpoints WHERE session_id = ?", (session_id,)) as cursor:
                     row = await cursor.fetchone()
@@ -310,7 +364,8 @@ class StateStore:
                         }
         except Exception as e:
             logger.debug(f"[StateStore] DB get checkpoint fallback ({e})")
-        return self._checkpoints.get(session_id)
+        async with self._lock:
+            return self._checkpoints.get(session_id)
 
 
 # Global singleton instance

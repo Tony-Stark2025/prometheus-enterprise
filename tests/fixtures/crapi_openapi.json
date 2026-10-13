@@ -1,0 +1,90 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "OWASP completely ridiculous Application (crAPI) Enterprise Benchmark",
+    "version": "2.0.0",
+    "description": "Realistic microservice specification exposing OWASP API Security Top 10 vulnerabilities (BOLA/IDOR, BFLA)."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000"
+    }
+  ],
+  "paths": {
+    "/api/v2/vehicle/{vehicle_id}/location": {
+      "get": {
+        "summary": "Get Vehicle GPS Telemetry and Location",
+        "description": "BOLA/IDOR vulnerable endpoint: allows cross-tenant location tracking without ownership verification.",
+        "operationId": "getVehicleLocation",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicle location telemetry"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          }
+        }
+      }
+    },
+    "/api/v2/secure-vehicle/{vehicle_id}/location": {
+      "get": {
+        "summary": "Secure Vehicle Location Endpoint",
+        "description": "Properly validates tenant ownership before returning location telemetry.",
+        "operationId": "getSecureVehicleLocation",
+        "parameters": [
+          {
+            "name": "vehicle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Vehicle location telemetry"
+          },
+          "404": {
+            "description": "Vehicle not found"
+          }
+        }
+      }
+    },
+    "/api/v2/admin/mechanic/orders/{order_id}": {
+      "delete": {
+        "summary": "Delete Mechanic Service Order",
+        "description": "BFLA vulnerable endpoint: unprivileged users can cancel or delete mechanic service orders.",
+        "operationId": "deleteMechanicOrder",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order deleted"
+          },
+          "404": {
+            "description": "Order not found"
+          }
+        }
+      }
+    }
+  }
+}
