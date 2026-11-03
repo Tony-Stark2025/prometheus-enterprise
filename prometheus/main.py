@@ -1020,6 +1020,97 @@ async def execute_contextual_swe_patch(req: SWEPatchRequest):
     }
 
 
+class PublishGitHubPRRequest(BaseModel):
+    repo: str = Field(..., description="Target GitHub repository in 'owner/repo' format")
+    pr_title: str = Field(..., description="Pull Request title")
+    pr_body_markdown: str = Field(..., description="Pull Request markdown body")
+    patched_files: Dict[str, str] = Field(..., description="Map of relative file path to patched file content")
+    base_branch: str = Field(default="main", description="Base branch name")
+    branch_name: Optional[str] = Field(default=None, description="Optional custom remediation branch name")
+
+
+class MintOOBCanaryRequest(BaseModel):
+    target_endpoint: str = Field(..., description="Endpoint being probed for OOB vulnerability")
+    vector: str = Field(default="SSRF", description="Vulnerability vector")
+    ttl_seconds: int = Field(default=900, description="TTL in seconds for the ephemeral canary")
+
+
+@app.post("/api/v1/pentest/publish-pr", tags=["Pentest & Remediation"])
+async def publish_remediation_pr(req: PublishGitHubPRRequest):
+    """
+    Publishes a verified ContextualPatchPR directly to GitHub by creating a remediation
+    branch, committing patched files, and opening a Pull Request.
+    """
+    from prometheus.pentest.pr_reporter import PRReporter
+
+    return await PRReporter.publish_github_pull_request(
+        repo=req.repo,
+        pr_title=req.pr_title,
+        pr_body_markdown=req.pr_body_markdown,
+        patched_files=req.patched_files,
+        base_branch=req.base_branch,
+        branch_name=req.branch_name,
+    )
+
+
+@app.post("/api/v1/oob/mint", tags=["Out-of-Band (OOB) Oracle"])
+async def mint_oob_canary_endpoint(req: MintOOBCanaryRequest, request: Request):
+    """
+    Mints an ephemeral Out-of-Band (OOB) canary token and callback URL for Blind SSRF/XXE/RCE verification.
+    """
+    from prometheus.pentest.oob_listener import oob_canary_registry
+
+    base_url = str(request.base_url).rstrip("/")
+    reg = oob_canary_registry.mint_canary(
+        target_endpoint=req.target_endpoint,
+        vector=req.vector,
+        base_callback_url=base_url,
+        ttl_seconds=req.ttl_seconds,
+    )
+    return reg.model_dump()
+
+
+@app.get("/api/v1/oob/{canary_id}/status", tags=["Out-of-Band (OOB) Oracle"])
+async def get_oob_canary_status(canary_id: str):
+    """
+    Checks whether an OOB canary callback has been received and returns recorded telemetry.
+    """
+    from prometheus.pentest.oob_listener import oob_canary_registry
+
+    callbacks = oob_canary_registry.get_callbacks(canary_id)
+    return {
+        "canary_id": canary_id,
+        "oob_callback_received": len(callbacks) > 0,
+        "callbacks_count": len(callbacks),
+        "callbacks": [cb.model_dump() for cb in callbacks],
+    }
+
+
+@app.api_route("/api/v1/oob/{canary_id}", methods=["GET", "POST", "PUT", "HEAD"], tags=["Out-of-Band (OOB) Oracle"])
+async def receive_oob_canary_callback(canary_id: str, request: Request):
+    """
+    Ephemeral Out-of-Band (OOB) Canary Callback Listener.
+    Records inbound HTTP callbacks triggered by Blind SSRF, XXE, or asynchronous webhooks.
+    """
+    from prometheus.pentest.oob_listener import oob_canary_registry
+
+    raw_body = await request.body()
+    body_str = raw_body.decode("utf-8", errors="replace") if raw_body else ""
+    source_ip = request.client.host if request.client else "unknown"
+    event = oob_canary_registry.record_callback(
+        canary_id=canary_id,
+        method=request.method,
+        source_ip=source_ip,
+        path=request.url.path,
+        query_params=dict(request.query_params),
+        headers=dict(request.headers),
+        body=body_str,
+    )
+    if event is None:
+        raise HTTPException(status_code=400, detail="Invalid OOB canary identifier format.")
+    return {"status": "recorded", "canary_id": canary_id}
+
+
 # ==============================================================================
 # Interactive CLI Runner
 # ==============================================================================

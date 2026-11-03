@@ -317,3 +317,141 @@ async def test_v25_rest_and_mcp_interfaces():
         assert "httpx.request" in poc_data["reproduction_script_python"]
         assert "super-secret-jwt" not in poc_data["reproduction_curl"]
 
+
+@pytest.mark.asyncio
+async def test_oob_canary_callback_listener_and_oracle_verification():
+    """
+    Verifies the Ephemeral Out-of-Band (OOB) Canary Callback Listener endpoints
+    and confirms that VerificationOracleAgent.build_tiered_evidence sets
+    oob_callback_received=True once an inbound callback hits the canary URL.
+    """
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        # 1. Mint an OOB canary via FastAPI endpoint
+        mint_resp = await client.post(
+            "/api/v1/oob/mint",
+            json={"target_endpoint": "/api/v1/webhooks/preview", "vector": "SSRF"},
+        )
+        assert mint_resp.status_code == 200
+        mint_data = mint_resp.json()
+        canary_id = mint_data["canary_id"]
+        assert canary_id.startswith("prom-oob-")
+
+        # 2. Before callback, status should report oob_callback_received == False
+        status_before = await client.get(f"/api/v1/oob/{canary_id}/status")
+        assert status_before.status_code == 200
+        assert status_before.json()["oob_callback_received"] is False
+
+        # 3. Trigger OOB callback (simulating SSRF/webhook target hitting the canary URL)
+        cb_resp = await client.post(
+            f"/api/v1/oob/{canary_id}?stage=ssrf_probe",
+            headers={"Authorization": "Bearer secret-internal-token"},
+            content=b"internal metadata response from 10.0.0.5",
+        )
+        assert cb_resp.status_code == 200
+        assert cb_resp.json()["status"] == "recorded"
+
+        # 4. Verify callback status and header sanitization
+        status_after = await client.get(f"/api/v1/oob/{canary_id}/status")
+        assert status_after.status_code == 200
+        after_data = status_after.json()
+        assert after_data["oob_callback_received"] is True
+        assert after_data["callbacks_count"] == 1
+        assert after_data["callbacks"][0]["headers"].get("authorization") == "[REDACTED]"
+
+        # 5. Verify VerificationOracleAgent.build_tiered_evidence reflects live OOB callback
+        proof = ExploitProof(
+            is_vulnerable=True,
+            vector=VulnerabilityCategory.SSRF,
+            severity=Severity.CRITICAL,
+            target_endpoint="/api/v1/webhooks/preview",
+            http_method=HttpMethod.POST,
+            http_status_code=200,
+            canary_marker=canary_id,
+            curl_command="curl -X POST http://testserver/api/v1/webhooks/preview",
+            remediation_guidance="Block internal IP ranges and enforce outbound allowlist.",
+            execution_time_ms=11.3,
+        )
+        evidence = VerificationOracleAgent.build_tiered_evidence(proof)
+        assert evidence["reproduction_manifest"]["canary_telemetry"]["oob_callback_received"] is True
+        assert evidence["reproduction_manifest"]["canary_telemetry"]["canary_identifier"] == canary_id
+
+
+@pytest.mark.asyncio
+async def test_github_pull_request_publisher_flow_and_validation():
+    """
+    Verifies PRReporter.publish_github_pull_request end-to-end against a simulated
+    GitHub REST API v3 ASGI server, including branch creation, file commit, PR opening,
+    and input security validation.
+    """
+    from prometheus.pentest.pr_reporter import PRReporter
+
+    gh_app = FastAPI()
+    state = {"refs": {}, "commits": {}, "prs": []}
+
+    @gh_app.get("/repos/{owner}/{repo}/git/ref/heads/{branch}")
+    async def get_ref(owner: str, repo: str, branch: str):
+        return {"ref": f"refs/heads/{branch}", "object": {"sha": "abc123def4567890"}}
+
+    @gh_app.post("/repos/{owner}/{repo}/git/refs", status_code=201)
+    async def create_ref(owner: str, repo: str, payload: dict):
+        state["refs"][payload["ref"]] = payload["sha"]
+        return {"ref": payload["ref"], "object": {"sha": payload["sha"]}}
+
+    @gh_app.get("/repos/{owner}/{repo}/contents/{file_path:path}")
+    async def get_file_contents(owner: str, repo: str, file_path: str):
+        return {"path": file_path, "sha": "existing-file-sha-001"}
+
+    @gh_app.put("/repos/{owner}/{repo}/contents/{file_path:path}")
+    async def put_file_contents(owner: str, repo: str, file_path: str, payload: dict):
+        state["commits"][file_path] = payload
+        return {"content": {"path": file_path, "sha": "new-file-sha-002"}}
+
+    @gh_app.post("/repos/{owner}/{repo}/pulls", status_code=201)
+    async def create_pr(owner: str, repo: str, payload: dict):
+        pr_record = {
+            "number": 42,
+            "html_url": f"https://github.com/{owner}/{repo}/pull/42",
+            "title": payload["title"],
+            "head": payload["head"],
+            "base": payload["base"],
+        }
+        state["prs"].append(pr_record)
+        return pr_record
+
+    # 1. Verify path traversal rejection
+    bad_path_res = await PRReporter.publish_github_pull_request(
+        repo="acme/api-service",
+        pr_title="fix: enforce tenant check",
+        pr_body_markdown="## Summary",
+        patched_files={"../etc/passwd": "malicious"},
+        github_token="ghp_test_token",
+    )
+    assert bad_path_res["published"] is False
+    assert bad_path_res["status"] == "INVALID_FILE_PATH"
+
+    # 2. Verify full GitHub branch + multi-file commit + PR creation flow
+    transport = httpx.ASGITransport(app=gh_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://github.local") as gh_client:
+        res = await PRReporter.publish_github_pull_request(
+            repo="acme/api-service",
+            pr_title="fix(security): enforce tenant isolation on /api/v1/invoices/{id}",
+            pr_body_markdown="## Root Cause\nMissing tenant ownership check.",
+            patched_files={
+                "app/api/invoices.py": "def get_invoice():\n    pass\n",
+                "tests/test_bola_invoices.py": "def test_bola_blocked():\n    assert True\n",
+            },
+            base_branch="main",
+            github_token="ghp_test_token_123",
+            api_base_url="http://github.local",
+            http_client=gh_client,
+        )
+        assert res["published"] is True, f"Unexpected PR publish response: {res}"
+        assert res["status"] == "PR_OPENED"
+        assert res["pr_number"] == 42
+        assert res["pr_url"] == "https://github.com/acme/api-service/pull/42"
+        assert len(res["committed_files"]) == 2
+        assert "app/api/invoices.py" in state["commits"]
+        assert state["commits"]["app/api/invoices.py"]["sha"] == "existing-file-sha-001"
+
+
