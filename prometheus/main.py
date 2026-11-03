@@ -27,12 +27,7 @@ from pydantic import BaseModel, Field
 
 from prometheus.config import settings
 from prometheus.security.abac_guard import UserContext
-from prometheus.memory.state_store import state_store, DraftStatus
-from prometheus.tools.slack_tools import SlackTools
-from prometheus.registry.agent_registry import agent_registry
 from prometheus.mcp.server import mcp_server
-from prometheus.workflows.prometheus_flow import PrometheusWorkflow, WorkflowExecutionResult
-from prometheus.scheduler import scheduler
 from prometheus.pentest.service import (
     PentestExecutionService,
     PentestScanRequest,
@@ -42,12 +37,7 @@ from prometheus.pentest.service import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Initialize persistent SQLite store and background scheduler
-    await state_store.init_db()
-    await scheduler.start()
     yield
-    # Shutdown
-    await scheduler.stop()
 
 
 app = FastAPI(
@@ -69,24 +59,6 @@ app.add_middleware(
 # ==============================================================================
 # Pydantic Request Models
 # ==============================================================================
-class TriggerDigestRequest(BaseModel):
-    user_id: str = "lead-01"
-    username: str = "alex-lead"
-    org_scopes: List[str] = Field(default_factory=lambda: ["engineering", "platform"])
-    query: str = "Generate daily alignment briefing and identify delivery blockers"
-
-
-class ActionApprovalRequest(BaseModel):
-    approver_username: str = "alex-lead"
-    content: Optional[str] = None
-    target: Optional[str] = None
-
-
-class ActionDraftEditRequest(BaseModel):
-    content: str
-    target: Optional[str] = None
-
-
 class ProxyMintTokenRequest(BaseModel):
     subject: str = "autonomous-agent"
     allowed_methods: List[str] = Field(default_factory=lambda: ["GET", "POST"])
@@ -147,7 +119,7 @@ DOCUMENTATION_PATH = os.path.join(os.path.dirname(__file__), "dashboard", "docum
 @app.get("/dashboard", response_class=HTMLResponse, tags=["Dashboard"])
 async def serve_dashboard():
     """
-    Renders the Prometheus Executive Chief of Staff Web Dashboard.
+    Renders the Prometheus Security & Capability Hypervisor Web Dashboard.
     """
     if os.path.exists(DASHBOARD_PATH):
         with open(DASHBOARD_PATH, "r", encoding="utf-8") as f:
@@ -210,6 +182,7 @@ async def switch_persona(req: Dict[str, str], response: Response):
         email=email,
         tenant_id="default_enterprise",
         scopes=scopes,
+        roles=roles,
     )
     response.set_cookie(key="session_token", value=token, httponly=True, samesite="lax")
     return {
@@ -325,15 +298,30 @@ async def list_abac_audit_logs(limit: int = 50):
 # ==============================================================================
 # Autonomous Pentest & Capability Hypervisor Firewall REST API
 # ==============================================================================
+from prometheus.saas.engine import saas_engine
+from prometheus.saas.models import (
+    APIKeyCreateRequest,
+    SubscriptionTier,
+    TIER_CATALOG,
+)
+from prometheus.security.agentic_owasp import (
+    agentic_owasp_engine,
+    AgenticInspectionRequest,
+    MCPGatewayProxyRequest,
+    OWASP_AGENTIC_TOP_10,
+)
+
+
 @app.get("/api/v1/security/overview", tags=["Capability Governance"])
-async def get_security_overview():
+async def get_security_overview(current_user: AuthUserContext = Depends(get_current_user_optional)):
     """
-    Aggregates live runtime capability firewall metrics, ABAC policies, and audit ledgers.
+    Aggregates live runtime capability firewall metrics, ABAC policies, OWASP Agentic posture, and SaaS usage.
     """
+    tenant_id = current_user.tenant_id or "default_enterprise"
     audit_logs = abac_engine.list_audit_logs(limit=20)
-    active_blockers = await state_store.get_active_blockers()
-    drafts = await state_store.list_drafts()
     registry_size = len(mcp_server.hypervisor.registry._witnesses)
+    asi_posture = agentic_owasp_engine.get_posture_summary(tenant_id=tenant_id)
+    usage = saas_engine.get_usage_snapshot(tenant_id=tenant_id)
     return {
         "status": "operational",
         "platform": "Prometheus Enterprise: Autonomous Exploit & Capability Governance Platform",
@@ -341,13 +329,18 @@ async def get_security_overview():
         "reflection_defense_active": True,
         "cegis_dual_pass_active": True,
         "hypervisor_active": True,
+        "owasp_agentic_top_10_active": True,
         "enforce_hypervisor": mcp_server.enforce_hypervisor,
         "registered_witnesses": registry_size,
-        "active_blockers_count": len(active_blockers),
-        "pending_action_cards_count": len([d for d in drafts if d.status == DraftStatus.PENDING]),
-        "executed_action_cards_count": len([d for d in drafts if d.status == DraftStatus.EXECUTED]),
         "abac_audit_events_count": len(audit_logs),
         "recent_audit_events": audit_logs[:10],
+        "agentic_posture": {
+            "posture_score": asi_posture["posture_score"],
+            "total_inspections": asi_posture["total_inspections"],
+            "threats_blocked": asi_posture["threats_blocked"],
+            "registered_mcp_servers": asi_posture["registered_mcp_servers"],
+        },
+        "saas_usage": usage.model_dump(),
     }
 
 
@@ -361,8 +354,21 @@ async def run_pentest_scan(
     Synthesizes dual-tenant context, probes for OWASP API Top 10 (BOLA/BFLA),
     validates zero false positives via reflection defense, and synthesizes regression tests.
     """
+    tenant_id = current_user.tenant_id or "default_enterprise"
     try:
-        return await PentestExecutionService.execute_scan(req)
+        saas_engine.record_usage(tenant_id=tenant_id, pentest_scans=1, enforce_quota=True)
+    except PermissionError as qe:
+        raise HTTPException(status_code=402, detail=str(qe))
+
+    try:
+        res = await PentestExecutionService.execute_scan(req)
+        if res.patches_count > 0:
+            saas_engine.record_usage(
+                tenant_id=tenant_id,
+                cegis_patches=res.patches_count,
+                enforce_quota=False,
+            )
+        return res
     except Exception as e:
         logger = structlog.get_logger(__name__) if "structlog" in sys.modules else None
         if logger:
@@ -378,13 +384,15 @@ async def proxy_mint_token(
     """
     Mints a short-lived capability token with cryptographically bounded monotonic attenuation.
     """
+    effective_tenant = req.tenant_id or current_user.tenant_id or "default_enterprise"
     token = mcp_server.hypervisor.token_authority.mint_token(
         subject=req.subject,
         allowed_methods=req.allowed_methods,
         allowed_resource_ids=req.allowed_resource_ids,
         ttl_seconds=req.ttl_seconds,
-        tenant_id=req.tenant_id,
+        tenant_id=effective_tenant,
     )
+    saas_engine.record_usage(tenant_id=effective_tenant, tokens_minted=1, enforce_quota=False)
     return token.model_dump()
 
 
@@ -423,9 +431,15 @@ async def proxy_execute_tool(
 ):
     """
     Direct Capability Hypervisor execution gateway for HTTP and MCP tool actions.
-    Fails closed on missing action permits or state drift.
+    Fails closed on missing action permits, state drift, or OWASP Agentic Top 10 violations.
     """
     from prometheus.proxy.models import ProxyToolRequest, ToolCallType
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    try:
+        saas_engine.record_usage(tenant_id=tenant_id, mcp_inspections=1, enforce_quota=True)
+    except PermissionError as qe:
+        raise HTTPException(status_code=402, detail=str(qe))
+
     call_t = ToolCallType.HTTP if req.call_type.upper() == "HTTP" else ToolCallType.MCP
     proxy_req = ProxyToolRequest(
         call_type=call_t,
@@ -439,7 +453,340 @@ async def proxy_execute_tool(
         session_id=req.session_id,
     )
     resp = await mcp_server.hypervisor.execute_tool(proxy_req)
+    if not resp.success:
+        saas_engine.record_usage(tenant_id=tenant_id, asi_threats_blocked=1, enforce_quota=False)
     return resp.model_dump()
+
+
+# ==============================================================================
+# OWASP Agentic Top 10 (ASI01-ASI10) & Live MCP Security Gateway
+# ==============================================================================
+@app.get("/api/v1/security/agentic/posture", tags=["OWASP Agentic Top 10 & MCP Gateway"])
+async def get_agentic_security_posture(
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Returns live OWASP Top 10 for Agentic Applications (ASI01-ASI10) posture score,
+    control matrix, and recent blocked agentic tool invocations.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    return agentic_owasp_engine.get_posture_summary(tenant_id=tenant_id)
+
+
+@app.post("/api/v1/security/agentic/inspect", tags=["OWASP Agentic Top 10 & MCP Gateway"])
+async def inspect_agentic_tool_call(
+    req: AgenticInspectionRequest,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Inspects an autonomous agent tool call and prompt context against all 10 categories
+    of the 2026 OWASP Agentic Security Top 10 (ASI01-ASI10) and CoSAI DLP guardrails.
+    """
+    tenant_id = current_user.tenant_id if current_user.is_authenticated else req.tenant_id
+    req.tenant_id = tenant_id
+    try:
+        saas_engine.record_usage(tenant_id=tenant_id, mcp_inspections=1, enforce_quota=True)
+    except PermissionError as qe:
+        raise HTTPException(status_code=402, detail=str(qe))
+
+    res = agentic_owasp_engine.inspect_tool_invocation(req)
+    if not res.allowed:
+        saas_engine.record_usage(tenant_id=tenant_id, asi_threats_blocked=1, enforce_quota=False)
+    return res.model_dump()
+
+
+@app.get("/api/v1/mcp/gateway/servers", tags=["OWASP Agentic Top 10 & MCP Gateway"])
+async def list_mcp_gateway_servers(
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Lists pinned upstream MCP servers registered in the enterprise supply-chain catalog (ASI04).
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    servers = agentic_owasp_engine.list_mcp_servers(tenant_id=tenant_id)
+    return {"servers": [s.model_dump() for s in servers]}
+
+
+class RegisterMCPServerRequest(BaseModel):
+    server_id: str = Field(..., min_length=2, max_length=64)
+    name: str = Field(..., min_length=2, max_length=120)
+    endpoint_url: str = Field(..., description="Upstream HTTP JSON-RPC URL or internal:// URI")
+    allowed_tools: List[str] = Field(default_factory=lambda: ["*"])
+    transport: str = "http_jsonrpc"
+
+
+@app.post("/api/v1/mcp/gateway/servers", tags=["OWASP Agentic Top 10 & MCP Gateway"])
+async def register_mcp_gateway_server(
+    req: RegisterMCPServerRequest,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Registers and cryptographically pins an upstream MCP server schema (ASI04 Supply Chain Defense).
+    Validates external endpoint URLs against SSRF before registration.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    if req.endpoint_url.startswith(("http://", "https://")):
+        from prometheus.pentest.exploit_prober import ExploitProber
+        parsed_host = req.endpoint_url.split("://")[-1].split("/")[0].split(":")[0]
+        is_loopback = parsed_host in ("localhost", "127.0.0.1", "::1", "testserver")
+        prober = ExploitProber(base_url=req.endpoint_url, allow_loopback=is_loopback)
+        try:
+            await prober.async_validate_ssrf(req.endpoint_url)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"SSRF validation failed for upstream MCP server URL: {e}")
+
+    srv = agentic_owasp_engine.register_mcp_server(
+        tenant_id=tenant_id,
+        server_id=req.server_id,
+        name=req.name,
+        endpoint_url=req.endpoint_url,
+        allowed_tools=req.allowed_tools,
+        transport=req.transport,
+    )
+    return srv.model_dump()
+
+
+@app.post("/api/v1/mcp/gateway/proxy", tags=["OWASP Agentic Top 10 & MCP Gateway"])
+async def proxy_mcp_gateway_call(
+    req: MCPGatewayProxyRequest,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Live MCP Security Gateway Reverse Proxy.
+    1. Enforces tenant SaaS quota & rate limits.
+    2. Inspects JSON-RPC tool calls against OWASP Agentic Top 10 (ASI01-ASI10) + Inline DLP.
+    3. Mediates through the Stateful Capability Hypervisor before dispatching to internal or upstream HTTP MCP servers.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    try:
+        saas_engine.record_usage(tenant_id=tenant_id, mcp_inspections=1, enforce_quota=True)
+    except PermissionError as qe:
+        raise HTTPException(status_code=402, detail=str(qe))
+
+    rpc = req.jsonrpc_payload
+    rpc_id = rpc.get("id", 1)
+    method = rpc.get("method", "")
+    params = rpc.get("params", {}) if isinstance(rpc.get("params"), dict) else {}
+
+    if method == "tools/call":
+        tool_name = params.get("name", "unknown_tool")
+        tool_args = params.get("arguments", {}) if isinstance(params.get("arguments"), dict) else {}
+        has_token = bool(
+            req.capability_token
+            or rpc.get("capability_token")
+            or rpc.get("token")
+            or tool_args.get("capability_token")
+        )
+        inspection = agentic_owasp_engine.inspect_tool_invocation(
+            AgenticInspectionRequest(
+                tenant_id=tenant_id,
+                agent_id=req.agent_id,
+                server_id=req.server_id,
+                tool_name=tool_name,
+                arguments=tool_args,
+                prompt_context=req.prompt_context,
+                delegation_depth=req.delegation_depth,
+                has_scoped_nhi_token=has_token,
+            )
+        )
+        if not inspection.allowed:
+            saas_engine.record_usage(tenant_id=tenant_id, asi_threats_blocked=1, enforce_quota=False)
+            return {
+                "jsonrpc": "2.0",
+                "id": rpc_id,
+                "gateway_status": "BLOCKED_BY_OWASP_AGENTIC_SHIELD",
+                "inspection": inspection.model_dump(),
+                "error": {
+                    "code": -32004,
+                    "message": f"OWASP Agentic Top 10 Violation: {inspection.violations[0].asi_id} ({inspection.violations[0].title})",
+                    "data": {
+                        "risk_score": inspection.risk_score,
+                        "violations": [v.model_dump() for v in inspection.violations],
+                    },
+                },
+            }
+
+        # Replace tool arguments with DLP-sanitized arguments before forwarding
+        params["arguments"] = inspection.sanitized_arguments
+        rpc["params"] = params
+    else:
+        inspection = None
+
+    srv = agentic_owasp_engine.get_mcp_server(req.server_id)
+    if not srv:
+        saas_engine.record_usage(tenant_id=tenant_id, asi_threats_blocked=1, enforce_quota=False)
+        return {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "gateway_status": "BLOCKED_UNREGISTERED_MCP_SERVER",
+            "error": {
+                "code": -32005,
+                "message": f"ASI04 Violation: Upstream MCP server '{req.server_id}' is not registered in the verified supply-chain catalog.",
+            },
+        }
+
+    if srv.transport == "internal" or srv.endpoint_url.startswith("internal://"):
+        downstream_resp = await mcp_server.handle_jsonrpc(
+            request_dict=rpc,
+            token=req.capability_token,
+            permit=req.action_permit,
+            session_id=f"gw_{req.agent_id}",
+        )
+    else:
+        import httpx
+        from prometheus.pentest.exploit_prober import ExploitProber
+        parsed_host = srv.endpoint_url.split("://")[-1].split("/")[0].split(":")[0]
+        is_loopback = parsed_host in ("localhost", "127.0.0.1", "::1", "testserver")
+        prober = ExploitProber(base_url=srv.endpoint_url, allow_loopback=is_loopback)
+        await prober.async_validate_ssrf(srv.endpoint_url)
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            http_res = await client.post(srv.endpoint_url, json=rpc)
+            http_res.raise_for_status()
+            downstream_resp = http_res.json()
+
+    return {
+        "gateway_status": "ADMITTED",
+        "server_id": srv.server_id,
+        "schema_pin_sha256": srv.schema_pin_sha256,
+        "inspection": inspection.model_dump() if inspection else None,
+        "mcp_response": downstream_resp,
+    }
+
+
+# ==============================================================================
+# Commercial SaaS: Multi-Tenant Billing, API Keys & Compliance Exports
+# ==============================================================================
+@app.get("/api/v1/saas/tiers", tags=["Commercial SaaS & Compliance"])
+async def list_saas_tiers():
+    """
+    Returns the October 2026 Hybrid PLG + Enterprise subscription tier catalog.
+    """
+    return {
+        "tiers": {k.value: v.model_dump() for k, v in TIER_CATALOG.items()},
+    }
+
+
+@app.get("/api/v1/saas/tenant", tags=["Commercial SaaS & Compliance"])
+async def get_saas_tenant_overview(
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Returns active organization profile, subscription tier, usage metering snapshot, and active API keys.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    org = saas_engine.get_or_create_tenant(tenant_id)
+    quota = saas_engine.get_tier_quota(tenant_id)
+    usage = saas_engine.get_usage_snapshot(tenant_id)
+    keys = saas_engine.list_api_keys(tenant_id)
+    return {
+        "organization": org.model_dump(),
+        "tier_quota": quota.model_dump(),
+        "usage": usage.model_dump(),
+        "api_keys": [k.model_dump() for k in keys],
+    }
+
+
+class UpdateTenantTierRequest(BaseModel):
+    tier: SubscriptionTier
+    organization_name: Optional[str] = None
+    billing_email: Optional[str] = None
+
+
+@app.post("/api/v1/saas/tenant/tier", tags=["Commercial SaaS & Compliance"])
+async def update_saas_tenant_tier(
+    req: UpdateTenantTierRequest,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Upgrades or modifies the tenant's subscription tier (Starter, Pro, Enterprise).
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    org = saas_engine.update_tenant_tier(
+        tenant_id=tenant_id,
+        new_tier=req.tier,
+        name=req.organization_name,
+        billing_email=req.billing_email,
+    )
+    return {
+        "status": "updated",
+        "organization": org.model_dump(),
+        "tier_quota": saas_engine.get_tier_quota(tenant_id).model_dump(),
+        "usage": saas_engine.get_usage_snapshot(tenant_id).model_dump(),
+    }
+
+
+@app.get("/api/v1/saas/api-keys", tags=["Commercial SaaS & Compliance"])
+async def list_tenant_api_keys(
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Lists scoped API keys (masked prefixes only) for the current tenant organization.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    keys = saas_engine.list_api_keys(tenant_id)
+    return {"api_keys": [k.model_dump() for k in keys]}
+
+
+@app.post("/api/v1/saas/api-keys", tags=["Commercial SaaS & Compliance"])
+async def create_tenant_api_key(
+    req: APIKeyCreateRequest,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Mints a new SHA-256 hashed Prometheus API key (prom_live_...).
+    The raw secret key is returned ONLY ONCE in this response.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    creator = current_user.email if current_user.is_authenticated else "admin@acme.corp"
+    try:
+        created = saas_engine.create_api_key(tenant_id=tenant_id, created_by=creator, req=req)
+        return created.model_dump()
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.delete("/api/v1/saas/api-keys/{key_id}", tags=["Commercial SaaS & Compliance"])
+async def revoke_tenant_api_key(
+    key_id: str,
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Immediately revokes an active API key.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    revoked = saas_engine.revoke_api_key(tenant_id=tenant_id, key_id=key_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail=f"API key '{key_id}' not found.")
+    return {"status": "revoked", "key_id": key_id}
+
+
+@app.get("/api/v1/saas/compliance/export", tags=["Commercial SaaS & Compliance"])
+async def export_compliance_bundle(
+    current_user: AuthUserContext = Depends(get_current_user_optional),
+):
+    """
+    Generates a cryptographically signed SOC2 Type II, EU AI Act Art. 12/15, and CoSAI
+    compliance audit bundle with SHA-256 Merkle state root and HMAC signature.
+    """
+    tenant_id = current_user.tenant_id or "default_enterprise"
+    quota = saas_engine.get_tier_quota(tenant_id)
+    if not quota.compliance_export_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Compliance export requires Pro or Enterprise tier (current tier: {quota.display_name}).",
+        )
+    asi_summary = agentic_owasp_engine.get_posture_summary(tenant_id=tenant_id)
+    abac_logs = abac_engine.list_audit_logs(limit=25)
+    witness_count = len(mcp_server.hypervisor.registry._witnesses)
+    bundle = saas_engine.generate_compliance_bundle(
+        tenant_id=tenant_id,
+        asi_control_matrix=asi_summary["controls"],
+        recent_abac_decisions=abac_logs,
+        recent_asi_interceptions=asi_summary["recent_interceptions"],
+        active_witness_count=witness_count,
+        posture_score=asi_summary["posture_score"],
+    )
+    return bundle.model_dump()
 
 
 # ==============================================================================
@@ -479,7 +826,7 @@ async def delete_integration(service: str, user: AuthUserContext = Depends(get_c
 async def health_check():
     return {
         "status": "healthy",
-        "service": "prometheus-chief-of-staff",
+        "service": "prometheus-security-engine",
         "platform_service": "prometheus-enterprise-security-and-governance",
         "app": settings.app_name,
         "environment": settings.environment,
@@ -490,144 +837,11 @@ async def health_check():
             "app_id": settings.agent_engine_app_id,
             "location": settings.agent_engine_location,
         },
-        "hitl_enforced": settings.enforce_human_in_the_loop,
         "mcp_enabled": settings.mcp_enabled,
         "capability_hypervisor_enforced": mcp_server.enforce_hypervisor,
+        "reflection_defense_active": True,
+        "cegis_dual_pass_active": True,
     }
-
-
-
-@app.get("/api/v1/blockers", tags=["Blockers"])
-async def list_blockers(user: AuthUserContext = Depends(get_current_user_optional)):
-    """
-    Returns all active correlated delivery blockers filtered by authorized organizational scope.
-    """
-    scopes = user.org_scopes if user and user.is_authenticated and user.org_scopes else None
-    blockers = await state_store.get_active_blockers(scopes=scopes)
-    items = [b.model_dump() for b in blockers]
-    return {"total": len(items), "blockers": items}
-
-
-@app.post("/api/v1/digest", response_model=WorkflowExecutionResult, tags=["Workflows"])
-async def trigger_alignment_digest(
-    req: TriggerDigestRequest,
-    current_user: AuthUserContext = Depends(get_current_user)
-):
-    """
-    Executes the multi-agent workflow to ingest telemetry, correlate blockers, and draft action cards.
-    Derives user credentials and bounds scopes to authenticated enterprise identity.
-    """
-    effective_user_id = current_user.user_id if current_user.user_id != "anonymous" else req.user_id
-    effective_username = current_user.name if current_user.user_id != "anonymous" else req.username
-
-    is_admin = "admin" in current_user.roles or "vp_engineering" in current_user.roles
-    if not is_admin and current_user.org_scopes:
-        effective_scopes = set(current_user.org_scopes) & set(req.org_scopes) if req.org_scopes else set(current_user.org_scopes)
-    else:
-        effective_scopes = set(req.org_scopes) if req.org_scopes else set(current_user.org_scopes or ["engineering", "platform"])
-
-    user = UserContext(
-        user_id=effective_user_id,
-        username=effective_username,
-        is_authenticated=True,
-        org_scopes=effective_scopes,
-        roles=current_user.roles,
-        is_admin=is_admin,
-    )
-    result = await PrometheusWorkflow.run(user=user, query=req.query)
-    return result
-
-
-@app.get("/api/v1/registry/agents", tags=["Fortified Enterprise Fleet"])
-async def list_registered_agents():
-    """
-    Agent Registry: Discovers and inspects capabilities and security controls of all 6 sub-agents.
-    """
-    agents = [a.model_dump() for a in agent_registry.list_agents()]
-    return {"total_agents": len(agents), "agents": agents}
-
-
-@app.get("/api/v1/actions", tags=["Human-in-the-Loop"])
-async def list_actions(
-    status: Optional[DraftStatus] = None,
-    user: AuthUserContext = Depends(get_current_user_optional)
-):
-    """
-    Lists proposed action cards waiting for human confirmation, filtered by authorized scope.
-    """
-    scopes = user.org_scopes if user and user.is_authenticated and user.org_scopes else None
-    drafts = await state_store.list_drafts(status=status, scopes=scopes)
-    items = [d.model_dump() for d in drafts]
-    return {"total": len(items), "actions": items, "drafts": items}
-
-
-@app.put("/api/v1/actions/{draft_id}", tags=["Human-in-the-Loop"])
-async def edit_action_draft(draft_id: str, req: ActionDraftEditRequest):
-    """
-    Updates the message body and/or target channel/recipient of a pending action draft prior to approval.
-    """
-    updated = await state_store.update_draft_content(
-        draft_id=draft_id,
-        content=req.content,
-        target=req.target,
-    )
-    if not updated:
-        raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
-    return {"status": "updated", "draft": updated.model_dump()}
-
-
-@app.post("/api/v1/actions/{draft_id}/approve", tags=["Human-in-the-Loop"])
-async def approve_action(
-    draft_id: str,
-    req: ActionApprovalRequest,
-    current_user: AuthUserContext = Depends(get_current_user)
-):
-    """
-    Explicit Human Sign-Off: Supports optional inline content/target edits prior to dispatching an action card.
-    Binds approver identity to verified session user.
-    """
-    approver = current_user.user_id if current_user.user_id != "anonymous" else req.approver_username
-    try:
-        if req.content is not None or req.target is not None:
-            existing = await state_store.get_draft(draft_id)
-            if not existing:
-                raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
-            await state_store.update_draft_content(
-                draft_id=draft_id,
-                content=req.content if req.content is not None else existing.content,
-                target=req.target if req.target is not None else existing.target_channel_or_user,
-            )
-        res = await SlackTools.dispatch_approved_action(
-            draft_id=draft_id,
-            approver_username=approver,
-        )
-        return res
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.post("/api/v1/actions/{draft_id}/reject", tags=["Human-in-the-Loop"])
-async def reject_action(
-    draft_id: str,
-    req: ActionApprovalRequest,
-    current_user: AuthUserContext = Depends(get_current_user)
-):
-    """
-    Aborts a proposed action draft.
-    """
-    approver = current_user.user_id if current_user.user_id != "anonymous" else req.approver_username
-    draft = await state_store.get_draft(draft_id)
-    if not draft:
-        raise HTTPException(status_code=404, detail=f"Draft '{draft_id}' not found.")
-    if draft.status == DraftStatus.EXECUTED:
-        return {"status": "already_executed", "draft_id": draft_id}
-    await state_store.update_draft_status(
-        draft_id=draft_id,
-        status=DraftStatus.REJECTED,
-        approver=approver,
-        result="Action rejected by user.",
-    )
-    return {"status": "rejected", "draft_id": draft_id}
 
 
 # ==============================================================================
@@ -665,8 +879,10 @@ async def github_webhook_receiver(
     x_hub_signature_256: Optional[str] = Header(None, alias="X-Hub-Signature-256")
 ):
     """
-    Receives real-time GitHub PR and CI status webhooks and routes to GitAgent.
-    Verifies HMAC-SHA256 signature when secret is configured.
+    Receives real-time GitHub PR and CI deployment status webhooks.
+    Verifies HMAC-SHA256 signature when secret is configured, and triggers
+    PentestExecutionService when a preview deployment URL (target_url or
+    deployment.environment_url) is provided.
     """
     import hmac
     import hashlib
@@ -686,121 +902,153 @@ async def github_webhook_receiver(
         payload = {}
 
     event_type = payload.get("action", "unknown")
-    pr_id = payload.get("pull_request", {}).get("number", "unknown")
-    return {
-        "status": "received",
+    pr_obj = payload.get("pull_request", {}) if isinstance(payload.get("pull_request"), dict) else {}
+    pr_id = pr_obj.get("number", payload.get("number", "unknown"))
+
+    target_url = (
+        payload.get("target_url")
+        or (payload.get("deployment_status", {}) or {}).get("environment_url")
+        or (payload.get("deployment", {}) or {}).get("environment_url")
+        or (pr_obj.get("head", {}).get("repo", {}) or {}).get("homepage")
+    )
+    scan_summary = None
+    if target_url and isinstance(target_url, str) and target_url.startswith(("http://", "https://")):
+        scan_req = PentestScanRequest(
+            target_url=target_url,
+            spec_url=payload.get("spec_url"),
+            target_dir=payload.get("target_dir"),
+            auth_header_alpha=payload.get("auth_header_alpha"),
+            auth_header_beta=payload.get("auth_header_beta"),
+            seed_params=payload.get("seed_params"),
+        )
+        scan_res = await PentestExecutionService.execute_scan(scan_req)
+        scan_summary = {
+            "scan_time_seconds": scan_res.elapsed_seconds,
+            "endpoints_probed": scan_res.endpoints_count,
+            "exploits_count": scan_res.exploits_count,
+            "patches_count": scan_res.patches_count,
+            "cumulative_diff": scan_res.cumulative_diff,
+        }
+
+    resp_payload: Dict[str, Any] = {
+        "status": "scanned" if scan_summary else "received",
         "event": f"github_pr_{event_type}",
         "resource": f"PR-{pr_id}",
     }
+    if scan_summary:
+        resp_payload["scan_result"] = scan_summary
+    return resp_payload
 
 
-@app.post("/api/v1/webhooks/slack", tags=["Webhooks"])
-async def slack_webhook_receiver(
-    request: Request,
-    x_slack_signature: Optional[str] = Header(None, alias="X-Slack-Signature"),
-    x_slack_request_timestamp: Optional[str] = Header(None, alias="X-Slack-Request-Timestamp")
-):
+class ImmunologyScanRequest(BaseModel):
+    target_dir: str = Field(default=".", description="Target repository directory for dependency & reachability analysis")
+
+
+class SWEPatchRequest(BaseModel):
+    target_dir: Optional[str] = Field(default=None, description="Target repository directory")
+    target_file: str = Field(..., description="Relative path to target source file")
+    target_endpoint: str = Field(..., description="Vulnerable HTTP route path")
+    http_method: str = Field(default="GET", description="HTTP method")
+    vector: str = Field(default="BOLA_IDOR", description="Vulnerability category")
+
+
+@app.post("/api/v1/immunology/scan")
+async def execute_immunology_scan(req: ImmunologyScanRequest):
     """
-    Receives real-time Slack message events and HITL interactive button callbacks.
-    Supports both application/x-www-form-urlencoded ('payload=...') and application/json.
-    Verifies HMAC-SHA256 signature when secret is configured.
+    Prometheus v2.5 Event-Driven Continuous Immunology Endpoint.
+    Ingests live advisories from The Hacker News (THN) RSS and OSV.dev APIs,
+    extracts repository dependencies, and verifies source-code reachability.
     """
-    import json as _json
-    import hmac
-    import hashlib
-    from urllib.parse import parse_qs
+    from prometheus.pentest.immunology import ContinuousImmunologyEngine
 
-    raw_body_bytes = await request.body()
-    slack_signing_secret = os.getenv("SLACK_SIGNING_SECRET")
-    if slack_signing_secret and x_slack_signature and x_slack_request_timestamp:
-        if abs(time.time() - float(x_slack_request_timestamp)) > 300:
-            raise HTTPException(status_code=401, detail="Slack webhook timestamp expired.")
-        basestring = f"v0:{x_slack_request_timestamp}:{raw_body_bytes.decode('utf-8')}".encode("utf-8")
-        expected_sig = "v0=" + hmac.new(slack_signing_secret.encode("utf-8"), basestring, hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected_sig, x_slack_signature):
-            raise HTTPException(status_code=401, detail="Invalid Slack webhook signature.")
-    elif settings.environment == "production" and slack_signing_secret and not x_slack_signature:
-        raise HTTPException(status_code=401, detail="Missing X-Slack-Signature header.")
+    target_dir = req.target_dir if os.path.isdir(req.target_dir) else os.getcwd()
+    engine = ContinuousImmunologyEngine()
+    return await engine.run_immunology_sweep(target_dir)
 
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" in content_type:
-        raw_body = raw_body_bytes.decode("utf-8")
-        parsed_form = parse_qs(raw_body)
-        payload_str = parsed_form.get("payload", ["{}"])[0]
-        payload = _json.loads(payload_str)
+
+@app.post("/api/v1/pentest/swe-patch")
+async def execute_contextual_swe_patch(req: SWEPatchRequest):
+    """
+    Prometheus v2.5 Contextual Agentic SWE Program Repair Endpoint.
+    Analyzes repository conventions, synthesizes an idiomatic code patch,
+    verifies native compilation, and returns a Staff-Engineer ContextualPatchPR.
+    """
+    from prometheus.pentest.swe_patcher import ContextualSWERepairAgent
+    from prometheus.pentest.models import ExploitProof, HttpMethod, Severity, VulnerabilityCategory
+
+    base_dir = req.target_dir or os.getcwd()
+    full_path = os.path.join(base_dir, req.target_file) if not os.path.isabs(req.target_file) else req.target_file
+    if os.path.isfile(full_path):
+        with open(full_path, "r", encoding="utf-8") as f:
+            source_code = f.read()
     else:
-        payload = _json.loads(raw_body_bytes.decode("utf-8")) if raw_body_bytes else {}
+        source_code = (
+            f'@app.{req.http_method.lower()}("{req.target_endpoint}")\n'
+            "async def handler(resource_id: str, current_user: UserSession = Depends(get_current_user)):\n"
+            "    resource = DB.get(resource_id)\n"
+            "    if not resource:\n"
+            '        raise HTTPException(status_code=404, detail="Not found")\n'
+            "    return resource\n"
+        )
 
-    if "type" in payload and payload["type"] == "url_verification":
-        return {"challenge": payload.get("challenge")}
+    method_str = req.http_method.upper()
+    method_enum = HttpMethod(method_str) if method_str in HttpMethod.__members__ else HttpMethod.GET
+    vec_enum = VulnerabilityCategory.BFLA if "BFLA" in req.vector.upper() else VulnerabilityCategory.BOLA_IDOR
 
-    if "actions" in payload:
-        action = payload["actions"][0]
-        draft_id = action.get("value")
-        action_id = action.get("action_id")
-        user = payload.get("user", {}).get("username", "slack-user")
+    proof = ExploitProof(
+        is_vulnerable=True,
+        vector=vec_enum,
+        severity=Severity.HIGH,
+        target_endpoint=req.target_endpoint,
+        http_method=method_enum,
+        http_status_code=200,
+        curl_command=f"curl -X {method_enum.value} http://localhost:8000{req.target_endpoint}",
+        remediation_guidance="Enforce tenant ownership and RBAC policy.",
+        execution_time_ms=4.2,
+    )
 
-        if action_id == "approve_action":
-            res = await SlackTools.dispatch_approved_action(draft_id, user)
-            return {"text": f"✓ {res['result']}"}
-        else:
-            await state_store.update_draft_status(draft_id, DraftStatus.REJECTED, user, "Rejected via Slack button.")
-            return {"text": "Action dismissed."}
-
-    return {"status": "received"}
+    swe_agent = ContextualSWERepairAgent(target_dir=base_dir)
+    patch_res, contextual_pr = await swe_agent.synthesize_contextual_patch(
+        original_code=source_code,
+        proof=proof,
+        target_file=req.target_file,
+    )
+    return {
+        "status": "PATCH_SYNTHESIZED",
+        "patch": patch_res.model_dump(),
+        "contextual_pr": contextual_pr.model_dump(),
+    }
 
 
 # ==============================================================================
 # Interactive CLI Runner
 # ==============================================================================
 async def cli_runner():
-    await state_store.init_db()
     print("=" * 75)
-    print(" 🚀 Prometheus Chief of Staff - Interactive Multi-Agent Orchestration")
+    print(" 🚀 Prometheus Enterprise - Autonomous API Security & Capability Hypervisor")
     print("=" * 75)
 
-    user = UserContext(
-        user_id="lead-01",
-        username="alex-lead",
-        is_authenticated=True,
-        org_scopes={"engineering", "platform"},
+    print("\n[1/3] Inspecting Capability Hypervisor Invariants & Token Authority...")
+    token = mcp_server.hypervisor.token_authority.mint_token(
+        subject="cli-security-auditor",
+        allowed_methods=["GET", "POST", "scan_api_security"],
+        allowed_resource_ids=["*"],
+        ttl_seconds=60,
     )
+    print(f"  • Minted Capability Token: {token.token_id}")
+    print(f"  • Attenuation Subject: {token.subject}")
+    print(f"  • Monotonic Methods: {token.scope.allowed_methods}")
 
-    print("\n[1/4] Triggering Asynchronous Multi-Agent Ingestion & Synthesis...")
-    result = await PrometheusWorkflow.run(
-        user=user,
-        query="Scan cross-squad telemetry for active sprint blockers",
-    )
+    print("\n[2/3] Checking Dynamic ABAC Security Perimeter...")
+    users = abac_engine.list_users()
+    print(f"  • Registered Enterprise Identities: {len(users)}")
+    resources = abac_engine.list_resources()
+    print(f"  • Registered Protected Endpoints/Resources: {len(resources)}")
 
-    print(f"\n Session ID: {result.session_id}")
-    print(f" Status: {result.status}")
-    print(f" Summary: {result.summary}")
-
-    print("\n[2/4] Correlated Delivery Blockers:")
-    for b in result.blockers:
-        print(f"  • [{b['severity']}] {b['title']}")
-        print(f"    Impact: {b['impacted_squads']} | Sources: {b['source_artifacts']}")
-
-    print("\n[3/4] Proposed Action Cards (Human-in-the-Loop):")
-    for d in result.action_drafts:
-        print(f"  • Draft ID: {d['draft_id']} -> Target: {d['target_channel_or_user']}")
-        print(f"    Action: {d['action_type']}")
-        print(f"    Content: {d['content']}")
-        print(f"    Status: {d['status']}")
-
-    if result.action_drafts:
-        first_draft_id = result.action_drafts[0]["draft_id"]
-        print(f"\n[4/4] Interactive Human-In-The-Loop Approval Checkpoint for {first_draft_id}:")
-        print("  Options: [Y] Approve & Dispatch | [N] Discard | [E] Edit")
-        print(f"  Simulating human sign-off [Y]...")
-        dispatch_res = await SlackTools.dispatch_approved_action(
-            draft_id=first_draft_id,
-            approver_username=user.username,
-        )
-        print(f"  ✓ {dispatch_res['result']}")
-
+    print("\n[3/3] Ready for Autonomous Exploit Scanning and Inline Capability Mediation.")
+    print("  Use 'python -m prometheus.cli_scan --url <target_url>' to execute autonomous pentest.")
     print("\n" + "=" * 75)
-    print(" ✨ Prometheus Workflow Completed Successfully!")
+    print(" ✨ Prometheus Security Engine Verification Passed!")
     print("=" * 75)
 
 

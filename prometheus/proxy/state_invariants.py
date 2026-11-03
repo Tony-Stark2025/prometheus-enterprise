@@ -164,12 +164,17 @@ class StateInvariantGate:
                 if k.endswith("_id") and v:
                     return str(v[0])
         if isinstance(payload, dict):
-            for k in ("resource_id", "id", "draft_id", "item_id", "target_id", "invoice_id", "workspace_id", "user_id"):
-                if k in payload and payload[k] is not None:
-                    return str(payload[k])
-            for k, v in payload.items():
-                if k.endswith("_id") and isinstance(v, (str, int)):
-                    return str(v)
+            candidate_dicts = [payload]
+            for sub_key in ("args", "params", "body", "data", "input"):
+                if isinstance(payload.get(sub_key), dict):
+                    candidate_dicts.append(payload[sub_key])
+            for d in candidate_dicts:
+                for k in ("resource_id", "id", "draft_id", "item_id", "target_id", "invoice_id", "workspace_id", "user_id"):
+                    if k in d and d[k] is not None:
+                        return str(d[k])
+                for k, v in d.items():
+                    if k.endswith("_id") and isinstance(v, (str, int)):
+                        return str(v)
         return None
 
     def __init__(
@@ -280,7 +285,18 @@ class StateInvariantGate:
         """
         # Resolve resource ID from query or payload if not passed explicitly
         if resource_id is None:
-            resource_id = self.extract_resource_id_from_body_or_query(target, payload)
+            clean_target = target.split("?")[0].rstrip("/").lower()
+            is_create = (
+                method.upper() == "POST"
+                and not any(act in clean_target for act in (
+                    "approve", "reject", "cancel", "submit", "publish", "archive",
+                    "lock", "mutate", "transfer", "revoke", "grant", "execute", "apply", "delete", "update", "modify"
+                ))
+            )
+            if not is_create:
+                resource_id = self.extract_resource_id_from_body_or_query(target, payload)
+            elif "?" in target:
+                resource_id = self.extract_resource_id_from_body_or_query(target, None)
 
         # Safe read operations do not require prior lineage or permits
         if not self.is_mutation(method, target):

@@ -1,6 +1,6 @@
 """
 Model Context Protocol (MCP) Ecosystem for Prometheus.
-Includes Prometheus MCP Server (stdio & SSE) and MCP Client adapter.
+Exposes Prometheus API Security Scanner and Capability Hypervisor firewall controls as MCP tools.
 """
 
 from prometheus.mcp.protocol import (
@@ -11,7 +11,6 @@ from prometheus.mcp.protocol import (
     MCPListToolsResponse,
 )
 from prometheus.mcp.server import PrometheusMCPServer, mcp_server
-from prometheus.mcp.client import PrometheusMCPClient, mcp_client
 
 __all__ = [
     "JSONRPCRequest",
@@ -21,6 +20,4 @@ __all__ = [
     "MCPListToolsResponse",
     "PrometheusMCPServer",
     "mcp_server",
-    "PrometheusMCPClient",
-    "mcp_client",
 ]

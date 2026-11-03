@@ -25,7 +25,6 @@ from prometheus.proxy.state_invariants import (
 )
 from prometheus.proxy.hypervisor import ToolExecutionHypervisor
 from prometheus.mcp.server import PrometheusMCPServer
-from prometheus.memory.state_store import state_store, ActionDraftRecord, DraftStatus
 
 
 @pytest.fixture
@@ -276,57 +275,47 @@ class TestHypervisorProxyLifecycle:
     @pytest.mark.asyncio
     async def test_mcp_server_real_integration(self, token_authority):
         """
-        Verifies integration with PrometheusMCPServer over JSON-RPC 2.0.
+        Verifies integration with MCP tool execution over JSON-RPC 2.0 mediated by Hypervisor.
         """
-        # Create real action draft in state store
         draft_id = "draft-hypervisor-test-99"
-        record = ActionDraftRecord(
-            draft_id=draft_id,
-            target_channel_or_user="#sec-ops",
-            action_type="slack_channel_alert",
-            content="Emergency hotfix ready",
-            status=DraftStatus.PENDING,
-        )
-        await state_store.save_draft(record)
+        test_store = {draft_id: {"draft_id": draft_id, "status": "pending"}}
 
-        mcp_server = PrometheusMCPServer()
+        async def custom_mcp_handler(request_dict):
+            params = request_dict.get("params", {})
+            name = params.get("name")
+            args = params.get("arguments", {})
+            if name == "inspect_resource":
+                r_id = args.get("resource_id", draft_id)
+                return {"content": [{"type": "text", "text": str(test_store.get(r_id, {}))}]}
+            elif name == "approve_action":
+                r_id = args.get("draft_id", draft_id)
+                if r_id in test_store:
+                    test_store[r_id]["status"] = "approved"
+                return {"content": [{"type": "text", "text": '{"status": "success"}'}]}
+            return {"content": []}
+
         hypervisor = ToolExecutionHypervisor(
             token_authority=token_authority,
-            mcp_handler=mcp_server.handle_jsonrpc,
+            mcp_handler=custom_mcp_handler,
         )
-        # Register draft in hypervisor registry
-        hypervisor.registry.register_state(draft_id, {"draft_id": draft_id, "status": DraftStatus.PENDING.value})
+        # Register state in hypervisor registry
+        hypervisor.registry.register_state(draft_id, test_store[draft_id])
 
         token = token_authority.mint_token(
             subject="mcp-lead-user",
-            allowed_methods=["tools/call", "list_pending_actions", "approve_action"],
+            allowed_methods=["tools/call", "inspect_resource", "approve_action"],
             allowed_resource_ids=["*", draft_id],
             ttl_seconds=60,
         )
 
         session_id = "mcp-session-test"
 
-        # 1. Inspect drafts via MCP list_pending_actions (read tool)
-        list_req = {
+        # 1. Inspect resource via MCP inspect_resource (read tool to establish lineage)
+        read_req = {
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": {"name": "list_pending_actions", "arguments": {}},
-        }
-        list_resp = await hypervisor.handle_mcp_jsonrpc(
-            request_dict=list_req,
-            token=token,
-            session_id=session_id,
-        )
-        assert "result" in list_resp
-        assert list_resp["id"] == 1
-
-        # Read draft to establish lineage for draft_id
-        read_req = {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": "list_pending_actions", "arguments": {"resource_id": draft_id}},
+            "params": {"name": "inspect_resource", "arguments": {"resource_id": draft_id}},
         }
         read_resp = await hypervisor.handle_mcp_jsonrpc(
             request_dict=read_req,
@@ -340,10 +329,10 @@ class TestHypervisorProxyLifecycle:
         assert witness is not None
         permit = token_authority.mint_action_permit(token, "approve_action", draft_id, witness)
 
-        # 2. Mutate draft via MCP approve_action with valid permit
+        # 2. Mutate resource via MCP approve_action with valid permit
         approve_req = {
             "jsonrpc": "2.0",
-            "id": 3,
+            "id": 2,
             "method": "tools/call",
             "params": {
                 "name": "approve_action",
@@ -360,7 +349,8 @@ class TestHypervisorProxyLifecycle:
             session_id=session_id,
         )
         assert "result" in approve_resp
-        assert approve_resp["id"] == 3
+        assert approve_resp["id"] == 2
+        assert test_store[draft_id]["status"] == "approved"
 
     @pytest.mark.asyncio
     async def test_lifecycle_collection_post_entity_creation(self, token_authority, mock_backend):

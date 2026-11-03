@@ -1,40 +1,31 @@
-# E2E Test Infra: Prometheus AI Chief of Staff
+# E2E Test Infra: Prometheus Enterprise
 
 ## Test Philosophy
-- Opaque-box & transparent-box hybrid verification: Derived from user requirements in `ORIGINAL_REQUEST.md`.
+- Deterministic verification across all security and runtime systems.
 - Methodology: Category-Partition + Boundary Value Analysis + Pairwise Combinatorial + Real-World Workload Testing + Adversarial Red-Teaming.
+- Zero-mock policy: Tests invoke real ASGI applications, real cryptographic verification (HMAC-SHA256), real AST parsing, and real SSRF validation routines.
 
 ## Feature Inventory & Test Coverage Mapping
-| # | Feature | Source | Tier 1 (Unit) | Tier 2 (Live API) | Tier 3 (DAG/HITL) | Tier 4 (Remote) | Tier 5 (Adversarial) |
-|---|---------|--------|:-------------:|:-----------------:|:-----------------:|:---------------:|:--------------------:|
-| 1 | GitHub Live PR Ingestion | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 2 | GitHub Review Latency | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 3 | GitHub CI Failures | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 4 | Jira Sprint Issues | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 5 | Jira Blocker Dependencies | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 6 | Slack Ingestion | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 7 | Slack Action Card & DM Dispatch | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 8 | Rate Limiting & Auth Handling | ORIGINAL_REQUEST §R1 | ✓ | 5 | ✓ | ✓ | ✓ |
-| 9 | Vertex AI Agent Engine Packaging | ORIGINAL_REQUEST §R2 | ✓ | - | ✓ | 5 | ✓ |
-| 10 | Gemini 3.7 Flash & ADC | ORIGINAL_REQUEST §R2 | ✓ | - | ✓ | 5 | ✓ |
-| 11 | Cloud Run FastAPI & MCP Server | ORIGINAL_REQUEST §R2 | ✓ | - | ✓ | 5 | ✓ |
-| 12 | Secret Manager & Env Vars | ORIGINAL_REQUEST §R2 | ✓ | - | ✓ | 5 | ✓ |
-| 13 | ABAC Scope Perimeter Isolation | ORIGINAL_REQUEST §R3 | 5 | - | ✓ | ✓ | 5 |
-| 14 | Inline Prompt Defense & PII | ORIGINAL_REQUEST §R3 | 5 | - | ✓ | ✓ | 5 |
-| 15 | HITL Draft & Approval Lifecycle | ORIGINAL_REQUEST §R3 | 5 | - | 5 | ✓ | 5 |
+| # | Feature | Subsystem | Unit | Integration | Adversarial | E2E |
+|---|---------|-----------|:----:|:-----------:|:-----------:|:---:|
+| 1 | OpenAPI Lineage Graph & Tarjan SCC | `prometheus.pentest.lineage_graph` | ✓ | ✓ | ✓ | ✓ |
+| 2 | Dual-Tenant State Synthesizer | `prometheus.pentest.state_synthesizer` | ✓ | ✓ | ✓ | ✓ |
+| 3 | BOLA / BFLA Exploit Prober | `prometheus.pentest.exploit_prober` | ✓ | ✓ | ✓ | ✓ |
+| 4 | Cryptographic Reflection Defense | `prometheus.pentest.reflection_defense` | ✓ | ✓ | ✓ | ✓ |
+| 5 | CEGIS Dual-Pass AST Program Repair | `prometheus.pentest.cegis_verifier` | ✓ | ✓ | ✓ | ✓ |
+| 6 | Capability Hypervisor Firewall | `prometheus.proxy.hypervisor` | ✓ | ✓ | ✓ | ✓ |
+| 7 | Pre-State Witness H(S) Ledger | `prometheus.proxy.state_invariants` | ✓ | ✓ | ✓ | ✓ |
+| 8 | Monotonic Action Permits & Nonces | `prometheus.proxy.token_authority` | ✓ | ✓ | ✓ | ✓ |
+| 9 | Structured Semantic Denial Envelopes | `prometheus.proxy.denial_envelope` | ✓ | ✓ | ✓ | ✓ |
+| 10 | ABAC Policy Evaluation Engine | `prometheus.security.abac_engine` | ✓ | ✓ | ✓ | ✓ |
+| 11 | SSRF Defense-in-Depth & DNS Rebinding | `prometheus.pentest.exploit_prober` | ✓ | ✓ | ✓ | ✓ |
+| 12 | Model Context Protocol (MCP) Tools | `prometheus.mcp.server` | ✓ | ✓ | ✓ | ✓ |
+| 13 | CI/CD CLI Scanner (<85s SLA) | `prometheus.cli_scan` | ✓ | ✓ | ✓ | ✓ |
 
 ## Test Architecture
 - **Runner**: `pytest` with `pytest.ini` configuration.
 - **Directories**:
-  - `tests/unit/`: Tier 1 Hermetic Unit & Component Tests
-  - `tests/integration/`: Tier 2 Live API Integrations & Tier 3 Multi-Agent DAG Orchestration
-  - `tests/e2e/`: Tier 4 Remote Cloud Endpoints (`test_vertex_agent_engine_remote.py`, `test_cloud_run_remote.py`)
-  - `tests/adversarial/`: Tier 5 Prompt injection, ABAC boundary escalation, race condition fuzzing (`test_adversarial_matrix.py`)
-
-## Coverage Thresholds
-- **Tier 1 (Hermetic Unit)**: ≥15 test cases covering ABAC math, PII regex, MCP JSON-RPC, SQLite persistence.
-- **Tier 2 (Live API Integration)**: ≥15 test cases covering GitHub, Jira Cloud, Slack with rate limiting and fallback.
-- **Tier 3 (Multi-Agent DAG)**: ≥10 test cases covering 6-agent execution, correlation heuristics, HITL lifecycle & idempotency.
-- **Tier 4 (Remote Cloud Endpoints)**: ≥5 test cases validating live Vertex AI Reasoning Engine and Cloud Run HTTP/SSE endpoints.
-- **Tier 5 (Adversarial & Security)**: ≥10 test cases validating prompt injection defense, cross-tenant isolation, and race condition resistance.
-- **Total Expected Tests**: ≥55 comprehensive test cases.
+  - `tests/unit/`: Hermetic Unit Tests (Config, MCP protocol, ABAC rules, Hypervisor tokens).
+  - `tests/integration/`: Integration Tests (Hypervisor proxy lifecycle, Pentest engine, OpenAPI lineage).
+  - `tests/adversarial/`: Red-team matrix (HMAC tampering, replay fuzzing, canary collisions, SSRF bypasses).
+  - `tests/e2e/`: End-to-end endpoints and live execution tests.

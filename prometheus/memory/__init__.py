@@ -2,6 +2,6 @@
 Memory and State Persistence package.
 """
 
-from prometheus.memory.state_store import StateStore, ActionDraftRecord, BlockerRecord
+from prometheus.memory.firestore_store import FirestoreStore, firestore_store
 
-__all__ = ["StateStore", "ActionDraftRecord", "BlockerRecord"]
+__all__ = ["FirestoreStore", "firestore_store"]

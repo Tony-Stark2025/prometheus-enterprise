@@ -156,9 +156,22 @@ class ToolExecutionHypervisor:
                     request.resource_id = str(res_id)
 
             if request.resource_id is None:
-                request.resource_id = StateInvariantGate.extract_resource_id_from_body_or_query(
-                    request.target, request.payload
+                clean_target = request.target.split("?")[0].rstrip("/").lower()
+                is_create = (
+                    request.method.upper() == "POST"
+                    and not any(act in clean_target for act in (
+                        "approve", "reject", "cancel", "submit", "publish", "archive",
+                        "lock", "mutate", "transfer", "revoke", "grant", "execute", "apply", "delete", "update", "modify"
+                    ))
                 )
+                if not is_create:
+                    request.resource_id = StateInvariantGate.extract_resource_id_from_body_or_query(
+                        request.target, request.payload
+                    )
+                elif "?" in request.target:
+                    request.resource_id = StateInvariantGate.extract_resource_id_from_body_or_query(
+                        request.target, None
+                    )
 
         # 1. Capability Attenuation & Caveat Gate
         tenant_id = (

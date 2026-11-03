@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="prometheus",
     version="1.1.0",
-    description="Autonomous AI Chief of Staff & Workstream Observability Platform",
+    description="Autonomous API Penetration Testing & Runtime Capability Hypervisor",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[

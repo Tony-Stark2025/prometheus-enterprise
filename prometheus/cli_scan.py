@@ -60,11 +60,18 @@ async def run_scan(
     fail_on_exploit: bool = False,
     output_diff_file: Optional[str] = None,
     output_markdown_file: Optional[str] = None,
+    output_sarif_file: Optional[str] = None,
     jwt_secret: Optional[str] = None,
     auth_header_alpha: Optional[str] = None,
     auth_header_beta: Optional[str] = None,
     output_test_file: Optional[str] = None,
+    target_dir: Optional[str] = None,
+    apply_patch: bool = False,
     timeout: float = 10.0,
+    seed_params: Optional[Dict[str, str]] = None,
+    sensitive_markers: Optional[List[str]] = None,
+    alpha_tenant_id: str = "org-alpha-victim-001",
+    beta_tenant_id: str = "org-beta-attacker-002",
 ) -> int:
     try:
         async with asyncio.timeout(80.0):
@@ -75,11 +82,18 @@ async def run_scan(
                 fail_on_exploit=fail_on_exploit,
                 output_diff_file=output_diff_file,
                 output_markdown_file=output_markdown_file,
+                output_sarif_file=output_sarif_file,
                 jwt_secret=jwt_secret,
                 auth_header_alpha=auth_header_alpha,
                 auth_header_beta=auth_header_beta,
                 output_test_file=output_test_file,
+                target_dir=target_dir,
+                apply_patch=apply_patch,
                 timeout=timeout,
+                seed_params=seed_params,
+                sensitive_markers=sensitive_markers,
+                alpha_tenant_id=alpha_tenant_id,
+                beta_tenant_id=beta_tenant_id,
             )
     except TimeoutError:
         print("\n[-] CI/CD SLA Violation: Scan exceeded 80.0s global timeout threshold.")
@@ -93,36 +107,70 @@ async def _run_scan_internal(
     fail_on_exploit: bool = False,
     output_diff_file: Optional[str] = None,
     output_markdown_file: Optional[str] = None,
+    output_sarif_file: Optional[str] = None,
     jwt_secret: Optional[str] = None,
     auth_header_alpha: Optional[str] = None,
     auth_header_beta: Optional[str] = None,
     output_test_file: Optional[str] = None,
+    target_dir: Optional[str] = None,
+    apply_patch: bool = False,
     timeout: float = 10.0,
+    seed_params: Optional[Dict[str, str]] = None,
+    sensitive_markers: Optional[List[str]] = None,
+    alpha_tenant_id: str = "org-alpha-victim-001",
+    beta_tenant_id: str = "org-beta-attacker-002",
 ) -> int:
     start_total_time = time.perf_counter()
 
     print(f"[*] Target Endpoint: {target_url}")
-    print(f"[*] Parsing OpenAPI Specification...")
+    if target_dir:
+        print(f"[*] Target Codebase Directory: {os.path.abspath(target_dir)}")
 
-    endpoints = OpenAPIngestor.parse_spec(spec_data)
+    endpoints: List[RouteEndpoint] = []
+    if spec_data and isinstance(spec_data, dict) and spec_data.get("paths"):
+        print(f"[*] Parsing OpenAPI Specification...")
+        endpoints = OpenAPIngestor.parse_spec(spec_data)
+    if not endpoints and target_dir:
+        print(f"[*] Discovering API routes statically from source code in: {target_dir}...")
+        endpoints = OpenAPIngestor.extract_routes_from_directory(target_dir)
     print(f"[+] Discovered {len(endpoints)} API operations.")
 
     # 1. State Synthesis: Mint Authentic Cryptographic Dual-Tenant Identities
     print(f"\n[*] Synthesizing Dual-Tenant Security Boundaries (Tenant Alpha & Tenant Beta)...")
     synthesizer = StateSynthesizer(jwt_secret=jwt_secret)
+    default_marker = (
+        sensitive_markers[0]
+        if sensitive_markers and len(sensitive_markers) > 0
+        else "CONFIDENTIAL_PAYROLL_DATA_ALPHA_8832"
+    )
     synthesizer.register_seeded_resource(
         resource_type="invoice",
         resource_id="inv-alpha-992",
-        confidential_marker="CONFIDENTIAL_PAYROLL_DATA_ALPHA_8832",
+        confidential_marker=default_marker,
     )
     synthesizer.register_seeded_resource(
         resource_type="workspace",
         resource_id="ws-alpha-001",
         confidential_marker="CONFIDENTIAL_WORKSPACE_ALPHA_001",
     )
+    if seed_params:
+        for param_key, param_val in seed_params.items():
+            synthesizer.register_seeded_resource(
+                resource_type=param_key,
+                resource_id=str(param_val),
+                confidential_marker=default_marker,
+            )
+            clean_key = param_key[:-3] if param_key.endswith("_id") else param_key
+            if clean_key != param_key:
+                synthesizer.register_seeded_resource(
+                    resource_type=clean_key,
+                    resource_id=str(param_val),
+                    confidential_marker=default_marker,
+                )
+
     context = synthesizer.create_dual_context(
-        alpha_tenant_id="org-alpha-victim-001",
-        beta_tenant_id="org-beta-attacker-002",
+        alpha_tenant_id=alpha_tenant_id,
+        beta_tenant_id=beta_tenant_id,
         beta_role="member",
         auth_header_alpha=auth_header_alpha,
         auth_header_beta=auth_header_beta,
@@ -135,8 +183,12 @@ async def _run_scan_internal(
         print(f"  • Active Cryptographic Tokens Mints: HS256 Signed JWTs.")
 
     # 2. Exploit Prober with Persistent Connection Pool
-    print(f"\n[*] Initializing High-Throughput Connection Pool & Active Learning Engine...")
+    print(f"\n[*] Initializing High-Throughput Connection Pool & Multi-Agent Engine...")
     validator = ProofValidator(redact_tokens=True)
+    if sensitive_markers:
+        for marker in sensitive_markers:
+            if marker not in validator.sensitive_markers:
+                validator.sensitive_markers.append(marker)
     prober = ExploitProber(
         base_url=target_url,
         timeout=timeout,
@@ -158,14 +210,26 @@ async def _run_scan_internal(
         context=context,
         prober=prober,
         max_turns=dynamic_turns,
+        target_dir=target_dir,
     )
 
-    print(f"[*] Launching Autonomous Adversarial Search Loop (Lineage-Tiered Exploration)...")
+    print(f"[*] Launching Autonomous Multi-Agent Search Loop (Coordinator -> Prober -> Oracle -> CEGIS)...")
     engine_results = await engine.run()
     elapsed_time = time.perf_counter() - start_total_time
 
     confirmed_exploits: List[ExploitProof] = engine_results.get("vulnerabilities", [])
     synthesized_patches: List[AutoPatchResult] = engine_results.get("patches", [])
+    cumulative_diff: str = engine_results.get("cumulative_diff", "")
+    patched_files: Dict[str, str] = engine_results.get("patched_files", {})
+    llm_telemetry: Dict[str, Any] = engine_results.get("llm_telemetry", {})
+
+    if llm_telemetry:
+        prov = llm_telemetry.get("provider", "deterministic").upper()
+        mod = llm_telemetry.get("model", "deterministic")
+        proj = llm_telemetry.get("project")
+        print(f"  • Coordinator LLM Provider: {prov} (Model: {mod}{f', GCP Project: {proj}' if proj else ''})")
+        if llm_telemetry.get("strategic_summary"):
+            print(f"  • Coordinator Strategy:     {llm_telemetry['strategic_summary']}")
 
     print("\n" + "=" * 80)
     print(f"                PROMETHEUS SECURITY GATE SCAN SUMMARY")
@@ -175,6 +239,18 @@ async def _run_scan_internal(
     print(f"  Confirmed Exploits:     {len(confirmed_exploits)} (0% False Positives)")
     print(f"  Certified Auto-Patches: {len(synthesized_patches)}")
     print("=" * 80)
+
+    # Always write SARIF report if requested (even when 0 exploits found for clean GitHub Code Scanning status)
+    if output_sarif_file:
+        sarif_payload = PRReporter.format_sarif_report(
+            proofs=confirmed_exploits,
+            patches=synthesized_patches,
+            target_url=target_url,
+            redact_tokens=True,
+        )
+        with open(output_sarif_file, "w", encoding="utf-8") as f:
+            json.dump(sarif_payload, f, indent=2)
+        print(f"\n[+] OASIS SARIF v2.1.0 report written to: {output_sarif_file}")
 
     # 3. Output Findings
     if confirmed_exploits:
@@ -199,18 +275,23 @@ async def _run_scan_internal(
 
         if output_test_file and confirmed_exploits:
             is_ts = output_test_file.endswith((".ts", ".tsx", ".js"))
-            tests_to_write = [
-                RegressionTestGenerator.generate_typescript(p) if is_ts else RegressionTestGenerator.generate_pytest(p)
-                for p in confirmed_exploits
-            ]
+            suite_code = (
+                RegressionTestGenerator.generate_suite_typescript(confirmed_exploits)
+                if is_ts
+                else RegressionTestGenerator.generate_suite_pytest(confirmed_exploits)
+            )
             with open(output_test_file, "w", encoding="utf-8") as f:
-                f.write("\n\n".join(tests_to_write))
-            print(f"\n[+] Synthesized CI/CD Regression Test(s) written to: {output_test_file}")
+                f.write(suite_code)
+            print(f"\n[+] Synthesized CI/CD Regression Test Suite written to: {output_test_file}")
 
         # PR Reporter Markdown
         markdown_reports: List[str] = []
-        for proof in confirmed_exploits:
-            matching_patch = next((p for p in synthesized_patches if p.verification_status == "VERIFIED_FIX"), None)
+        for idx, proof in enumerate(confirmed_exploits):
+            matching_patch = (
+                synthesized_patches[idx]
+                if idx < len(synthesized_patches) and synthesized_patches[idx].verification_status == "VERIFIED_FIX"
+                else next((p for p in synthesized_patches if p.verification_status == "VERIFIED_FIX"), None)
+            )
             comment_md = PRReporter.format_github_pr_comment(proof, matching_patch, redact_tokens=True)
             markdown_reports.append(comment_md)
 
@@ -222,10 +303,19 @@ async def _run_scan_internal(
             print(f"\n[+] GitHub PR Markdown report written to: {output_markdown_file}")
 
         if output_diff_file and synthesized_patches:
-            combined_diff = "\n".join(p.git_diff for p in synthesized_patches if p.git_diff)
+            diff_to_write = cumulative_diff or "\n".join(p.git_diff for p in synthesized_patches if p.git_diff)
             with open(output_diff_file, "w", encoding="utf-8") as f:
-                f.write(combined_diff)
+                f.write(diff_to_write)
             print(f"[+] Certified Unified Git Diff written to: {output_diff_file}")
+
+        if apply_patch and patched_files:
+            base_dir = target_dir or os.getcwd()
+            for rel_file, new_code in patched_files.items():
+                abs_target = os.path.join(base_dir, rel_file)
+                if os.path.exists(abs_target):
+                    with open(abs_target, "w", encoding="utf-8") as f:
+                        f.write(new_code)
+                    print(f"[+] Applied certified AST auto-patch directly to: {abs_target}")
 
         # Native GitHub Actions Step Summary & Output Integration
         if "GITHUB_STEP_SUMMARY" in os.environ:
@@ -238,7 +328,7 @@ async def _run_scan_internal(
                     f.write(f"- **Certified Auto-Patches:** `{len(synthesized_patches)}`\n\n")
                     if full_md_output:
                         f.write(full_md_output)
-            except Exception as e:
+            except Exception:
                 pass
 
         if "GITHUB_OUTPUT" in os.environ:
@@ -246,7 +336,7 @@ async def _run_scan_internal(
                 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
                     f.write(f"exploits_count={len(confirmed_exploits)}\n")
                     f.write(f"patches_count={len(synthesized_patches)}\n")
-            except Exception as e:
+            except Exception:
                 pass
 
     else:
@@ -328,17 +418,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--target-url", type=str, default="http://127.0.0.1:8000", help="Root URL of running target API")
     parser.add_argument("--spec", type=str, help="Path to OpenAPI / Swagger JSON or YAML specification")
-    parser.add_argument("--spec-url", type=str, help="URL to OpenAPI JSON specification")
+    parser.add_argument("--spec-url", type=str, help="URL or relative path (e.g. /openapi.json) to OpenAPI specification")
+    parser.add_argument("--config", type=str, help="Path to JSON scan configuration (identities, seed params, sensitive markers)")
+    parser.add_argument("--seed-param", action="append", default=[], help="Seeded path/resource parameter key=value (repeatable)")
     parser.add_argument("--app-cmd", type=str, help="Optional shell command to boot preview server prior to scan")
+    parser.add_argument("--target-dir", type=str, help="Local codebase directory for static route & AST source file discovery and patching")
+    parser.add_argument("--apply-patch", action="store_true", help="Apply certified AST patches directly to files in --target-dir")
     parser.add_argument("--demo", action="store_true", help="Run self-contained end-to-end benchmark demo with in-memory ASGI")
     parser.add_argument("--fail-on-exploit", action="store_true", help="Exit code 1 if exploits are verified (CI/CD PR gate)")
     parser.add_argument("--output-diff", type=str, help="File to write verified unified git diff patch")
     parser.add_argument("--output-markdown", type=str, help="File to write GitHub PR Markdown review comment")
+    parser.add_argument("--output-sarif", type=str, help="File to write OASIS SARIF v2.1.0 JSON report")
     parser.add_argument("--output-test", type=str, help="File to write synthesized pytest/vitest CI/CD regression test")
     parser.add_argument("--jwt-secret", type=str, help="JWT secret for cryptographic token synthesis")
     parser.add_argument("--auth-header-alpha", type=str, help="Enterprise IdP auth header or Bearer token for Tenant Alpha (Victim)")
     parser.add_argument("--auth-header-beta", type=str, help="Enterprise IdP auth header or Bearer token for Tenant Beta (Attacker)")
     parser.add_argument("--max-time", type=float, default=85.0, help="Maximum execution SLA timeout in seconds (default: 85.0s)")
+    parser.add_argument("--sla-budget-s", type=float, help="Alias for --max-time SLA timeout budget in seconds")
     return parser
 
 
@@ -348,7 +444,101 @@ def main() -> None:
     print_banner()
 
     start_wall_clock = time.perf_counter()
-    max_sla_seconds = args.max_time or 85.0
+    max_sla_seconds = args.sla_budget_s or args.max_time or 85.0
+
+    seed_params: Dict[str, str] = {}
+    sensitive_markers: List[str] = []
+    alpha_tenant_id = "org-alpha-victim-001"
+    beta_tenant_id = "org-beta-attacker-002"
+
+    # Parse --config if provided (supports both Prometheus config and multi-tenant identity configs)
+    if args.config:
+        if not os.path.exists(args.config):
+            print(f"[-] Error: Config file not found at: {args.config}")
+            sys.exit(2)
+        with open(args.config, "r", encoding="utf-8") as cf:
+            cfg = json.load(cf)
+        target_cfg = cfg.get("target", {})
+        base_url_cfg = target_cfg.get("base_url") if isinstance(target_cfg, dict) else None
+        if not base_url_cfg:
+            base_url_cfg = cfg.get("base_url")
+        if base_url_cfg and args.target_url == "http://127.0.0.1:8000":
+            args.target_url = base_url_cfg
+
+        if cfg.get("openapi_path") and not args.spec and not args.spec_url:
+            candidate_spec = cfg["openapi_path"]
+            if not os.path.isabs(candidate_spec):
+                rel_to_cfg = os.path.join(os.path.dirname(os.path.abspath(args.config)), os.path.basename(candidate_spec))
+                if os.path.exists(candidate_spec):
+                    args.spec = candidate_spec
+                elif os.path.exists(rel_to_cfg):
+                    args.spec = rel_to_cfg
+            elif os.path.exists(candidate_spec):
+                args.spec = candidate_spec
+        if isinstance(cfg.get("sensitive_markers"), list):
+            sensitive_markers.extend(str(m) for m in cfg["sensitive_markers"])
+        if isinstance(cfg.get("seed_params"), dict):
+            for k, v in cfg["seed_params"].items():
+                seed_params[str(k)] = str(v)
+
+        owner_cfg = cfg.get("owner", {})
+        if isinstance(owner_cfg, dict) and isinstance(owner_cfg.get("params"), dict):
+            for k, v in owner_cfg["params"].items():
+                seed_params[str(k)] = str(v)
+                if str(k) == "ws_id":
+                    seed_params["workspace"] = str(v)
+                elif str(k) == "proj_id":
+                    seed_params["project"] = str(v)
+                elif str(k) == "doc_id":
+                    seed_params["document"] = str(v)
+                elif str(k) == "org_id":
+                    seed_params["org"] = str(v)
+
+        identities = cfg.get("identities", {})
+        if isinstance(identities, list):
+            owner_name = owner_cfg.get("identity") if isinstance(owner_cfg, dict) else None
+            owner_identity = next((i for i in identities if i.get("name") == owner_name), None) or (identities[0] if identities else {})
+            attacker_identity = next((i for i in identities if i.get("tenant") != owner_identity.get("tenant")), None) or (identities[-1] if len(identities) > 1 else {})
+            if owner_identity.get("tenant"):
+                alpha_tenant_id = str(owner_identity["tenant"])
+            if owner_identity.get("headers", {}).get("Authorization") and not args.auth_header_alpha:
+                args.auth_header_alpha = owner_identity["headers"]["Authorization"]
+            if attacker_identity.get("tenant"):
+                beta_tenant_id = str(attacker_identity["tenant"])
+            if attacker_identity.get("headers", {}).get("Authorization") and not args.auth_header_beta:
+                args.auth_header_beta = attacker_identity["headers"]["Authorization"]
+        elif isinstance(identities, dict):
+            owner = identities.get("owner", {})
+            attacker = identities.get("cross_tenant_attacker") or identities.get("low_priv_same_tenant") or {}
+            if isinstance(owner, dict):
+                if owner.get("tenant"):
+                    alpha_tenant_id = str(owner["tenant"])
+                owner_headers = owner.get("headers", {})
+                if isinstance(owner_headers, dict) and owner_headers.get("Authorization") and not args.auth_header_alpha:
+                    args.auth_header_alpha = owner_headers["Authorization"]
+                owner_params = owner.get("params", {})
+                if isinstance(owner_params, dict):
+                    for k, v in owner_params.items():
+                        seed_params[str(k)] = str(v)
+                        if str(k) == "ws_id":
+                            seed_params["workspace"] = str(v)
+                        elif str(k) == "proj_id":
+                            seed_params["project"] = str(v)
+                        elif str(k) == "doc_id":
+                            seed_params["document"] = str(v)
+                        elif str(k) == "org_id":
+                            seed_params["org"] = str(v)
+            if isinstance(attacker, dict):
+                if attacker.get("tenant"):
+                    beta_tenant_id = str(attacker["tenant"])
+                att_headers = attacker.get("headers", {})
+                if isinstance(att_headers, dict) and att_headers.get("Authorization") and not args.auth_header_beta:
+                    args.auth_header_beta = att_headers["Authorization"]
+
+    for item in args.seed_param or []:
+        if "=" in item:
+            k, v = item.split("=", 1)
+            seed_params[k.strip()] = v.strip()
 
     if args.demo:
         print("[*] Running Prometheus Self-Contained Benchmark Demo with Live Multi-Tenant ASGI App...")
@@ -364,10 +554,17 @@ def main() -> None:
                         fail_on_exploit=args.fail_on_exploit,
                         output_diff_file=args.output_diff,
                         output_markdown_file=args.output_markdown,
+                        output_sarif_file=args.output_sarif,
                         jwt_secret=args.jwt_secret,
                         auth_header_alpha=args.auth_header_alpha,
                         auth_header_beta=args.auth_header_beta,
                         output_test_file=args.output_test,
+                        target_dir=args.target_dir,
+                        apply_patch=args.apply_patch,
+                        seed_params=seed_params,
+                        sensitive_markers=sensitive_markers,
+                        alpha_tenant_id=alpha_tenant_id,
+                        beta_tenant_id=beta_tenant_id,
                     ),
                     timeout=max_sla_seconds,
                 )
@@ -377,41 +574,11 @@ def main() -> None:
             exit_code = 1
         sys.exit(exit_code)
 
-    if not args.spec and not args.spec_url:
-        print("[-] Error: You must provide either --spec <file>, --spec-url <url>, or --demo.")
+    if not args.spec and not args.spec_url and not args.target_dir:
+        print("[-] Error: You must provide --spec <file>, --spec-url <url>, --target-dir <dir>, or --demo.")
         sys.exit(2)
 
-    spec_dict: Dict[str, Any] = {}
-    if args.spec:
-        if not os.path.exists(args.spec):
-            print(f"[-] Error: Spec file not found at: {args.spec}")
-            sys.exit(2)
-        with open(args.spec, "r", encoding="utf-8") as f:
-            if args.spec.endswith((".yaml", ".yml")):
-                try:
-                    import yaml
-                    spec_dict = yaml.safe_load(f)
-                except ImportError:
-                    print("[-] Error: PyYAML required to parse YAML specifications. Please install PyYAML or provide JSON.")
-                    sys.exit(2)
-            else:
-                spec_dict = json.load(f)
-    elif args.spec_url:
-        print(f"[*] Validating and fetching OpenAPI spec from: {args.spec_url}...")
-        from prometheus.pentest.exploit_prober import validate_ssrf
-        validate_ssrf(args.spec_url, allow_loopback=False)
-        resp = httpx.get(args.spec_url, timeout=15.0, follow_redirects=False)
-        resp.raise_for_status()
-        try:
-            spec_dict = resp.json()
-        except Exception:
-            try:
-                import yaml
-                spec_dict = yaml.safe_load(resp.text)
-            except Exception:
-                raise ValueError("Failed to parse OpenAPI specification as JSON or YAML.")
-
-    # Launch preview app if --app-cmd provided
+    # Launch preview app first if --app-cmd provided so relative --spec-url (/openapi.json) can be fetched from it
     app_proc = None
     if args.app_cmd:
         print(f"[*] Booting target application via: '{args.app_cmd}'...")
@@ -450,10 +617,48 @@ def main() -> None:
         else:
             print("[!] Warning: Target application did not respond to /health probe; proceeding anyway.")
 
-    elapsed_so_far = time.perf_counter() - start_wall_clock
-    remaining_budget = max(5.0, max_sla_seconds - elapsed_so_far)
-
     try:
+        spec_dict: Dict[str, Any] = {}
+        if args.spec:
+            if not os.path.exists(args.spec):
+                print(f"[-] Error: Spec file not found at: {args.spec}")
+                sys.exit(2)
+            with open(args.spec, "r", encoding="utf-8") as f:
+                if args.spec.endswith((".yaml", ".yml")):
+                    try:
+                        import yaml
+                        spec_dict = yaml.safe_load(f)
+                    except ImportError:
+                        print("[-] Error: PyYAML required to parse YAML specifications. Please install PyYAML or provide JSON.")
+                        sys.exit(2)
+                else:
+                    spec_dict = json.load(f)
+        elif args.spec_url:
+            resolved_spec_url = args.spec_url
+            if not (resolved_spec_url.startswith("http://") or resolved_spec_url.startswith("https://")):
+                resolved_spec_url = f"{args.target_url.rstrip('/')}/{resolved_spec_url.lstrip('/')}"
+            print(f"[*] Validating and fetching OpenAPI spec from: {resolved_spec_url}...")
+            from prometheus.pentest.exploit_prober import validate_ssrf
+            is_local = any(h in resolved_spec_url for h in ("127.0.0.1", "localhost", "[::1]"))
+            validate_ssrf(resolved_spec_url, allow_loopback=is_local)
+            try:
+                resp = httpx.get(resolved_spec_url, timeout=15.0, follow_redirects=False, trust_env=False)
+                resp.raise_for_status()
+                try:
+                    spec_dict = resp.json()
+                except Exception:
+                    import yaml
+                    spec_dict = yaml.safe_load(resp.text)
+            except Exception as fetch_err:
+                if args.target_dir:
+                    print(f"[!] Spec URL {resolved_spec_url} unavailable ({fetch_err}); falling back to static source route extraction.")
+                    spec_dict = {}
+                else:
+                    raise
+
+        elapsed_so_far = time.perf_counter() - start_wall_clock
+        remaining_budget = max(5.0, max_sla_seconds - elapsed_so_far)
+
         exit_code = asyncio.run(
             asyncio.wait_for(
                 run_scan(
@@ -462,10 +667,17 @@ def main() -> None:
                     fail_on_exploit=args.fail_on_exploit,
                     output_diff_file=args.output_diff,
                     output_markdown_file=args.output_markdown,
+                    output_sarif_file=args.output_sarif,
                     jwt_secret=args.jwt_secret,
                     auth_header_alpha=args.auth_header_alpha,
                     auth_header_beta=args.auth_header_beta,
                     output_test_file=args.output_test,
+                    target_dir=args.target_dir,
+                    apply_patch=args.apply_patch,
+                    seed_params=seed_params,
+                    sensitive_markers=sensitive_markers,
+                    alpha_tenant_id=alpha_tenant_id,
+                    beta_tenant_id=beta_tenant_id,
                 ),
                 timeout=remaining_budget,
             )
@@ -486,3 +698,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

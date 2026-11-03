@@ -4,15 +4,15 @@ from prometheus.config import Settings
 
 
 def test_config_plain_strings():
-    s = Settings(github_token='token_plain_test', jira_api_token='jira_token_123')
+    s = Settings(github_token='token_plain_test', gemini_api_key='gemini_token_123')
     assert s.github_token == 'token_plain_test'
-    assert s.jira_api_token == 'jira_token_123'
+    assert s.gemini_api_key == 'gemini_token_123'
 
 
 def test_config_empty_strings_convert_to_none():
-    s = Settings(github_token='   ', jira_api_token='')
+    s = Settings(github_token='   ', gemini_api_key='')
     assert s.github_token is None
-    assert s.jira_api_token is None
+    assert s.gemini_api_key is None
 
 
 def test_config_secret_manager_resolution():
@@ -25,10 +25,10 @@ def test_config_secret_manager_resolution():
 
         s = Settings(
             github_token='sm://prometheus-github-token',
-            slack_bot_token='secretmanager://projects/my-proj/secrets/slack-token/versions/2'
+            gemini_api_key='secretmanager://projects/my-proj/secrets/gemini-token/versions/2'
         )
         assert s.github_token == 'live-secret-val-456'
-        assert s.slack_bot_token == 'live-secret-val-456'
+        assert s.gemini_api_key == 'live-secret-val-456'
 
 
 def test_config_secret_manager_fallback_on_error():

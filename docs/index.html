@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Building Prometheus: Autonomous AI Chief of Staff with Gemini 3.7 & Google Cloud</title>
-  <meta name="description" content="How we built an autonomous multi-agent reasoning fleet with Gemini 3.7 Flash and Google Cloud to eliminate engineering delivery bottlenecks.">
+  <title>Building Prometheus Enterprise: Autonomous API Penetration Testing & Capability Hypervisor</title>
+  <meta name="description" content="How we built an autonomous API vulnerability discovery and program repair engine with Gemini 3.7 Flash and Google Cloud.">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,290 +48,138 @@
 
   <!-- TOP NAVIGATION HEADER -->
   <header class="sticky top-0 z-50 glass border-b border-dark-border">
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-      <a href="https://prometheus-chief-of-staff-mbnra7rjha-uc.a.run.app/dashboard" class="flex items-center space-x-3 group">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 transition">
-          <i data-lucide="flame" class="w-5 h-5 text-white"></i>
-        </div>
-        <div>
-          <span class="font-bold text-base tracking-tight text-white">PROMETHEUS</span>
-          <span class="text-[10px] text-blue-400 font-mono block -mt-1">Engineering Blog</span>
-        </div>
-      </a>
-
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
-        <a href="https://prometheus-chief-of-staff-mbnra7rjha-uc.a.run.app/documentation" target="_blank" class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-card border border-dark-border text-xs text-gray-300 hover:text-white hover:border-blue-500/50 transition">
-          <i data-lucide="book-open" class="w-3.5 h-3.5 text-cyan-400"></i>
-          <span>Whitepaper</span>
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/20">
+          <i data-lucide="shield-alert" class="w-4 h-4"></i>
+        </div>
+        <span class="font-bold text-white tracking-tight text-sm font-mono">PROMETHEUS ENTERPRISE</span>
+      </div>
+      <div class="flex items-center space-x-4 text-xs font-medium">
+        <a href="/dashboard" class="text-slate-400 hover:text-white transition flex items-center space-x-1">
+          <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+          <span>Dashboard</span>
         </a>
-        <a href="https://github.com/Tony-Stark2025/prometheus" target="_blank" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-dark-card border border-dark-border text-xs text-gray-300 hover:text-white hover:border-blue-500/50 transition">
-          <i data-lucide="github" class="w-3.5 h-3.5 text-white"></i>
-          <span>GitHub</span>
-        </a>
-        <a href="https://prometheus-chief-of-staff-mbnra7rjha-uc.a.run.app/dashboard" target="_blank" class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-semibold shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-indigo-500 transition">
-          <span>Live Demo</span>
-          <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+        <a href="/documentation" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition flex items-center space-x-1.5 font-semibold">
+          <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+          <span>Docs & Whitepaper</span>
         </a>
       </div>
     </div>
   </header>
 
-  <!-- HERO ARTICLE BANNER -->
-  <main class="flex-grow max-w-4xl mx-auto px-4 sm:px-6 py-12">
+  <!-- ARTICLE MAIN BODY -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-12 flex-1">
     
-    <article class="space-y-8">
-      
-      <!-- TITLE & META -->
-      <div class="space-y-4 pb-8 border-b border-dark-border">
-        <div class="flex items-center space-x-2">
-          <span class="px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs font-mono font-semibold border border-blue-500/20">Google Cloud & Vertex AI</span>
-          <span class="px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-mono font-semibold border border-purple-500/20">Gemini 3.7 Flash</span>
-          <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono font-semibold border border-emerald-500/20">Multi-Agent DAG</span>
-        </div>
-        
-        <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight">
-          Building Prometheus: How We Built an Autonomous AI Chief of Staff for Engineering Fleets with Gemini 3.7 & Google Cloud
-        </h1>
-        
-        <p class="text-base sm:text-lg text-dark-muted leading-relaxed font-normal">
-          Connecting GitHub, Jira, and Slack into an autonomous multi-agent reasoning DAG that predicts delivery bottlenecks and drives 1-click human-in-the-loop resolutions.
-        </p>
-
-        <div class="flex items-center justify-between pt-4 text-xs text-dark-muted font-mono">
-          <div class="flex items-center space-x-3">
-            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-cyan-400 flex items-center justify-center font-bold text-white text-sm">
-              BO
-            </div>
-            <div>
-              <span class="text-white font-semibold block">Bright Onwe</span>
-              <span>Lead AI Systems Engineer</span>
-            </div>
-          </div>
-          <div class="flex items-center space-x-4">
-            <span>Published Aug 2026</span>
-            <span>•</span>
-            <span>8 min read</span>
-          </div>
-        </div>
+    <!-- ARTICLE TITLE & METADATA -->
+    <div class="space-y-4 pb-8 border-b border-dark-border">
+      <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+        <span>Autonomous API Security & Program Repair</span>
       </div>
+      <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
+        Building Prometheus Enterprise: Autonomous API Penetration Testing & Capability Hypervisor with Gemini 3.7 & Google Cloud
+      </h1>
+      <p class="text-lg text-slate-300 font-light leading-relaxed">
+        Eliminating 100% of API security false positives with cryptographic reflection defense, CEGIS dual-pass AST program repair, and an inline capability hypervisor firewall.
+      </p>
+      <div class="flex items-center space-x-4 pt-2 text-xs text-slate-400 font-mono">
+        <span>By Bright Onwe</span>
+        <span>•</span>
+        <span>October 2026</span>
+        <span>•</span>
+        <span>Enterprise Security Track</span>
+      </div>
+    </div>
 
-      <!-- SECTION 1 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">🎯</span>
-          <span>The Hidden Tax on Modern Engineering Fleets</span>
+    <!-- CONTENT SECTIONS -->
+    <article class="prose prose-invert max-w-none pt-8 space-y-8 text-sm leading-relaxed text-slate-300">
+      
+      <section class="space-y-4">
+        <h2 class="text-xl font-bold text-white tracking-tight flex items-center space-x-2">
+          <span>🎯 The False-Positive Crisis in API Security</span>
         </h2>
-        <p>Every engineering leader and staff engineer knows the feeling:</p>
-        <ul class="list-disc list-inside space-y-1.5 pl-2 text-gray-300">
-          <li>A high-priority milestone is scheduled for Friday.</li>
-          <li>In Jira, tickets are marked <code class="text-amber-400 bg-dark-card px-1.5 py-0.5 rounded">"In Progress"</code>.</li>
-          <li>On GitHub, a critical pull request has been sitting unreviewed for 58 hours.</li>
-          <li>In Slack, engineers are debating an API interface mismatch in a buried thread.</li>
-        </ul>
         <p>
-          By the time anyone notices the blockage in a standup or retro, <strong class="text-red-400">days of velocity have already evaporated</strong>.
+          Broken authorization (BOLA and BFLA) accounts for over 60% of modern API security vulnerabilities. Traditional DAST scanners flood security teams with false alarms based on HTTP status codes, while manual pentests take weeks and cost tens of thousands of dollars.
         </p>
         <p>
-          Modern engineering organizations don't suffer from a lack of tools — they suffer from <strong>cross-domain fragmentation</strong>. GitHub knows code latency. Jira knows sprint deadlines. Slack knows team sentiment. But <strong>none of them talk to each other to diagnose root-cause delivery bottlenecks</strong>.
-        </p>
-        <p>
-          To solve this, we built <strong>Prometheus</strong>: an enterprise-grade, autonomous <strong>AI Chief of Staff</strong> powered by <strong>Google Cloud Vertex AI, Cloud Run, and Gemini 3.7 Flash</strong>.
+          To permanently solve this, we built <strong>Prometheus Enterprise</strong>: an autonomous system combining zero false-positive vulnerability discovery, automated AST source code repair, and an inline capability hypervisor.
         </p>
       </section>
 
-      <!-- SECTION 2 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">💡</span>
-          <span>What is Prometheus?</span>
-        </h2>
-        <p>
-          Prometheus is not just another chatbot or passive dashboard. It is an <strong>asynchronous multi-agent intelligence platform</strong> that continuously observes engineering workstreams across GitHub, Jira Cloud, and Slack.
-        </p>
-        <p>Instead of waiting for standups, Prometheus:</p>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          <div class="p-4 rounded-xl glass-card border border-dark-border space-y-2">
-            <div class="text-blue-400 font-bold text-sm flex items-center space-x-2">
-              <i data-lucide="radio" class="w-4 h-4"></i>
-              <span>1. Live Ingestion</span>
-            </div>
-            <p class="text-xs text-dark-muted">Ingests telemetry concurrently across code reviews, CI builds, Jira epics, and discussions.</p>
-          </div>
-          <div class="p-4 rounded-xl glass-card border border-dark-border space-y-2">
-            <div class="text-purple-400 font-bold text-sm flex items-center space-x-2">
-              <i data-lucide="sparkles" class="w-4 h-4"></i>
-              <span>2. Graph Correlation</span>
-            </div>
-            <p class="text-xs text-dark-muted">Correlates cross-domain evidence using Gemini 3.7 Flash to diagnose root causes.</p>
-          </div>
-          <div class="p-4 rounded-xl glass-card border border-dark-border space-y-2">
-            <div class="text-emerald-400 font-bold text-sm flex items-center space-x-2">
-              <i data-lucide="shield-check" class="w-4 h-4"></i>
-              <span>3. Propose, Don't Impose</span>
-            </div>
-            <p class="text-xs text-dark-muted">Drafts targeted Slack action cards requiring 1-click human sign-off before dispatch.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 3 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">🏛️</span>
-          <span>The Multi-Agent Reasoning Fleet DAG</span>
-        </h2>
-        <p>
-          Prometheus coordinates a fleet of <strong>6 specialized sub-agents</strong> structured in an asynchronous Directed Acyclic Graph (DAG) with strict ABAC boundaries:
-        </p>
-        <pre class="text-xs font-mono text-cyan-300 leading-relaxed">
-[User Request / Scheduled Fleet Trigger]
+      <section class="space-y-4">
+        <h2 class="text-xl font-bold text-white tracking-tight">🏛️ Core Architecture</h2>
+        <pre><code class="text-xs text-slate-200">[ CI/CD Pipeline / CLI / MCP Client ]
                  │
                  ▼
-    🛡️ Agent 1: Perimeter Router & ABAC Guard
-                 │ (Parallel Async Fan-Out)
-    ┌────────────┼────────────┐
-    ▼            ▼            ▼
-🐙 Agent 2   📋 Agent 3   💬 Agent 4
-(GitHub/CI)  (Jira Agile) (Slack Discussions)
-    └────────────┬────────────┘
-                 │ (Async Barrier Join)
-                 ▼
-    🧠 Agent 5: Synthesis & Root Cause (Gemini 3.7 Flash)
-                 │
-                 ▼
-    📝 Agent 6: Action & Drafting Agent ("Propose, Don't Impose")
-                 │
-      [State Checkpoint] ──► 🛑 HITL Human Gate (1-Click Approve)
-                                    │ (Approved)
-                                    ▼
-                         🚀 Slack Web API Dispatcher
-        </pre>
+ ┌──────────────────────────────────────┐
+ │       API Lineage Graph Engine       │
+ │   - OpenAPI 3.x Parsing              │
+ │   - Tarjan SCC Topological Order     │
+ └───────────────────┬──────────────────┘
+                     │
+                     ▼
+ ┌──────────────────────────────────────┐
+ │    Exploit Prober & Canary Defense   │
+ │   - Dual-Tenant Session Synthesis    │
+ │   - Cryptographic Reflection Oracle  │
+ │   - Multi-Tier SSRF Guardrails       │
+ └───────────────────┬──────────────────┘
+                     │
+                     ▼
+ ┌──────────────────────────────────────┐
+ │   CEGIS Dual-Pass AST Program Repair │
+ │   - Gemini 3.7 Flash AST Synthesizer │
+ │   - In-Memory ASGI Test Oracle       │
+ │   - Certified Unified Git Diff PR    │
+ └───────────────────┬──────────────────┘
+                     │
+                     ▼
+ ┌──────────────────────────────────────┐
+ │     Inline Capability Hypervisor     │
+ │   - Scoped HMAC Capability Tokens    │
+ │   - Pre-State Witness H(S) Ledger    │
+ │   - Semantic Denial Recovery Envelopes│
+ └──────────────────────────────────────┘</code></pre>
       </section>
 
-      <!-- SECTION 4 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">🔒</span>
-          <span>Enterprise Security: ABAC, OAuth 2.0 & Firestore Vault</span>
-        </h2>
-        <p>Enterprise engineering data is sensitive. We designed Prometheus with four non-negotiable security layers:</p>
-        <div class="space-y-3 pt-2">
-          <div class="p-4 rounded-xl bg-[#0e121e] border border-dark-border">
-            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
-              <i data-lucide="key" class="w-4 h-4 text-blue-400"></i>
-              <span>Google OAuth 2.0 & Session Management</span>
-            </h4>
-            <p class="text-xs text-dark-muted mt-1">Built-in enterprise authentication allowing new team leads and developers to authenticate frictionlessly.</p>
+      <section class="space-y-4">
+        <h2 class="text-xl font-bold text-white tracking-tight">⚡ Key Innovations</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="glass-card p-4 rounded-xl border border-dark-border space-y-2">
+            <h3 class="font-bold text-white text-xs">Reflection Defense</h3>
+            <p class="text-xs text-slate-400">Canaries injected into victim resources must be reflected in the unauthorized probe's response, mathematically guaranteeing zero false positives.</p>
           </div>
-          <div class="p-4 rounded-xl bg-[#0e121e] border border-dark-border">
-            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
-              <i data-lucide="shield" class="w-4 h-4 text-emerald-400"></i>
-              <span>Attribute-Based Access Control (ABAC) Perimeter</span>
-            </h4>
-            <p class="text-xs text-dark-muted mt-1">Every user token is bound to specific organizational scopes (<code class="text-cyan-300 font-mono">engineering</code>, <code class="text-cyan-300 font-mono">platform</code>). Telemetry from unauthorized squads is pruned before reaching the LLM.</p>
+          <div class="glass-card p-4 rounded-xl border border-dark-border space-y-2">
+            <h3 class="font-bold text-white text-xs">CEGIS Program Repair</h3>
+            <p class="text-xs text-slate-400">Dual-pass oracle ensures synthesized patches block attackers (403/404) while preserving legitimate owner workflows (200).</p>
           </div>
-          <div class="p-4 rounded-xl bg-[#0e121e] border border-dark-border">
-            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
-              <i data-lucide="lock" class="w-4 h-4 text-purple-400"></i>
-              <span>Multi-Tenant Firestore Encrypted Vault</span>
-            </h4>
-            <p class="text-xs text-dark-muted mt-1">API credentials for GitHub, Jira, and Slack are encrypted in Google Cloud Firestore with client-side key derivation, removing sensitive secrets from local disk.</p>
+          <div class="glass-card p-4 rounded-xl border border-dark-border space-y-2">
+            <h3 class="font-bold text-white text-xs">Capability Hypervisor</h3>
+            <p class="text-xs text-slate-400">Inline firewall validating scoped capability tokens, pre-state witnesses H(S), and monotonic action permits.</p>
           </div>
-          <div class="p-4 rounded-xl bg-[#0e121e] border border-dark-border">
-            <h4 class="text-sm font-bold text-white flex items-center space-x-2">
-              <i data-lucide="sword" class="w-4 h-4 text-red-400"></i>
-              <span>Model Armor Prompt Defense</span>
-            </h4>
-            <p class="text-xs text-dark-muted mt-1">Pre-execution filters detect prompt injection, jailbreak attempts, and redact PII/credentials before context is processed by Gemini.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 5 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">🎬</span>
-          <span>Real-World Walkthrough: From Blocker to 1-Click Resolution</span>
-        </h2>
-        <p>Here is what Prometheus looks like in action on our live Google Cloud Run deployment:</p>
-        <div class="space-y-4">
-          <div class="glass-card p-5 rounded-xl border border-dark-border space-y-2">
-            <span class="text-xs font-mono font-bold text-blue-400 uppercase">1. Ingest & Correlate</span>
-            <p class="text-xs text-gray-300">
-              Prometheus observes <code class="text-cyan-300 font-mono">Tony-Stark2025/ecommerce-platform</code> (PR #1), Jira (<code class="text-purple-300 font-mono">KAN-4</code>), and Slack.
-            </p>
-            <div class="p-3 rounded-lg bg-red-950/20 border border-red-500/30 text-xs text-red-300">
-              <strong>Correlated Blocker [BLK-01]:</strong> PR #1 (OAuth 2.1 token exchange) unreviewed for 3.2h from reviewer @brightbutler7. Directly freezes Epic KAN-4.
-            </div>
-          </div>
-
-          <div class="glass-card p-5 rounded-xl border border-dark-border space-y-2">
-            <span class="text-xs font-mono font-bold text-purple-400 uppercase">2. Action Card Drafted</span>
-            <div class="p-3 rounded-lg bg-[#141824] border border-[#23293d] text-xs text-gray-300 font-mono">
-              Hi @brightbutler7! 👋 PR #1 (OAuth 2.1) is awaiting your review and stalling Epic KAN-4. Could you please take a look today to unblock the milestone? 🚀
-            </div>
-          </div>
-
-          <div class="glass-card p-5 rounded-xl border border-dark-border space-y-2">
-            <span class="text-xs font-mono font-bold text-emerald-400 uppercase">3. 1-Click Human Sign-Off</span>
-            <p class="text-xs text-gray-300">
-              The tech lead clicks <strong>"Approve & Dispatch"</strong> on the executive dashboard. Prometheus executes <code class="text-emerald-400 font-mono">conversations.open</code> and <code class="text-emerald-400 font-mono">chat.postMessage</code>, dispatching the message directly to Slack in milliseconds.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION 6 -->
-      <section class="space-y-4 text-gray-300 leading-relaxed text-sm sm:text-base">
-        <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2.5 pt-4">
-          <span class="text-blue-400">📈</span>
-          <span>Key Learnings & Takeaways</span>
-        </h2>
-        <ol class="list-decimal list-inside space-y-2 text-gray-300">
-          <li><strong>"Propose, Don't Impose" is the Golden Rule for Agentic AI</strong>: Autonomous agents that take unconfirmed write actions in production destroy trust. Giving humans 1-click veto power transforms AI from a risky black box into an indispensable co-pilot.</li>
-          <li><strong>Correlation Beats Aggregation</strong>: Simply aggregating data into another dashboard creates alert fatigue. The true unlock is cross-domain reasoning — linking a Git pull request to a Jira epic and a Slack discussion.</li>
-          <li><strong>Dual Namespace Parity Invariant</strong>: Maintaining strict synchronization between mirrored package roots (<code class="text-blue-300 font-mono">prometheus/</code> $\leftrightarrow$ <code class="text-blue-300 font-mono">app/</code>) prevented circular imports and guaranteed zero drift between Cloud Run and local developer workflows.</li>
-        </ol>
-      </section>
-
-      <!-- SECTION 7: CALL TO ACTION -->
-      <section class="pt-8 border-t border-dark-border">
-        <div class="p-6 rounded-2xl bg-gradient-to-r from-blue-900/30 via-indigo-900/20 to-cyan-900/30 border border-blue-500/30 text-center space-y-4">
-          <h3 class="text-xl font-bold text-white">Experience Prometheus Live</h3>
-          <p class="text-xs sm:text-sm text-dark-muted max-w-xl mx-auto">
-            Test the live multi-agent reasoning fleet deployed on Google Cloud Run and explore the complete open-source codebase.
-          </p>
-          <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <a href="https://prometheus-chief-of-staff-mbnra7rjha-uc.a.run.app/dashboard" target="_blank" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 transition flex items-center space-x-2">
-              <span>Open Live Dashboard</span>
-              <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
-            </a>
-            <a href="https://github.com/Tony-Stark2025/prometheus" target="_blank" class="px-5 py-2.5 rounded-xl bg-dark-card hover:bg-dark-border border border-dark-border text-gray-200 text-xs font-semibold transition flex items-center space-x-2">
-              <i data-lucide="github" class="w-4 h-4"></i>
-              <span>Star on GitHub</span>
-            </a>
+          <div class="glass-card p-4 rounded-xl border border-dark-border space-y-2">
+            <h3 class="font-bold text-white text-xs">Semantic Denial Envelopes</h3>
+            <p class="text-xs text-slate-400">Structured violation envelopes providing automated recovery steps for AI agents and developer tooling.</p>
           </div>
         </div>
       </section>
 
     </article>
-
   </main>
 
-  <!-- FOOTER -->
-  <footer class="border-t border-dark-border py-8 text-center text-xs text-dark-muted">
-    <p>Built with ❤️ by Bright Onwe • Powered by Google Cloud Vertex AI & Gemini 3.7 Flash</p>
-    <p class="mt-1">Prometheus AI Chief of Staff • Zero-Mock Enterprise Autonomous Fleet</p>
+  <footer class="border-t border-dark-border py-6 text-center text-xs text-slate-500">
+    Prometheus Enterprise • Built on Google Cloud & Gemini 3.7 Flash
   </footer>
 
   <script>
     lucide.createIcons();
-    window.onscroll = function() {
-      const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+    window.addEventListener('scroll', () => {
+      const winScroll = document.documentElement.scrollTop;
       const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
       const scrolled = (winScroll / height) * 100;
-      document.getElementById("progress-bar").style.width = scrolled + "%";
-    };
+      document.getElementById('progress-bar').style.width = scrolled + '%';
+    });
   </script>
 </body>
 </html>

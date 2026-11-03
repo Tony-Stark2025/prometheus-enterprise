@@ -1,6 +1,6 @@
 """
 Prometheus Model Context Protocol (MCP) Server.
-Exposes Prometheus multi-agent telemetry, HITL actions, and Capability Hypervisor
+Exposes Prometheus API Security Scanner and Capability Hypervisor
 firewall controls as MCP tools over stdio and SSE.
 """
 
@@ -18,8 +18,6 @@ from prometheus.mcp.protocol import (
     MCPListToolsResponse,
 )
 from prometheus.security.abac_guard import UserContext
-from prometheus.memory.state_store import state_store, DraftStatus
-from prometheus.tools.slack_tools import SlackTools
 from prometheus.proxy.hypervisor import ToolExecutionHypervisor
 from prometheus.proxy.token_authority import TokenAuthority
 from prometheus.proxy.state_invariants import StateWitnessRegistry
@@ -29,57 +27,12 @@ logger = logging.getLogger(__name__)
 
 class PrometheusMCPServer:
     """
-    Standard Model Context Protocol (MCP) Server for Prometheus.
+    Standard Model Context Protocol (MCP) Server for Prometheus Enterprise.
     Mediated by the Stateful Execution Capability Hypervisor to enforce
     monotonic capability attenuation, causal dependency gates, and pre-state witness checks.
     """
 
     TOOLS: List[MCPToolDefinition] = [
-        MCPToolDefinition(
-            name="get_daily_digest",
-            description="Triggers the multi-agent fleet to ingest telemetry and produce the daily alignment digest.",
-            inputSchema=MCPToolParameter(
-                properties={
-                    "user_id": {"type": "string", "description": "Authenticated user ID"},
-                    "username": {"type": "string", "description": "User handle"},
-                    "scopes": {"type": "array", "items": {"type": "string"}, "description": "Authorized scopes"},
-                    "query": {"type": "string", "description": "Investigation query"},
-                },
-                required=["username"],
-            ),
-        ),
-        MCPToolDefinition(
-            name="list_active_blockers",
-            description="Lists all currently active delivery bottlenecks and correlated blockers.",
-            inputSchema=MCPToolParameter(properties={}),
-        ),
-        MCPToolDefinition(
-            name="list_pending_actions",
-            description="Lists action drafts waiting for Human-In-The-Loop approval.",
-            inputSchema=MCPToolParameter(properties={}),
-        ),
-        MCPToolDefinition(
-            name="approve_action",
-            description="Explicitly approves and dispatches an action draft to Slack/Jira.",
-            inputSchema=MCPToolParameter(
-                properties={
-                    "draft_id": {"type": "string", "description": "ID of the action draft"},
-                    "approver": {"type": "string", "description": "Username of the approver"},
-                },
-                required=["draft_id", "approver"],
-            ),
-        ),
-        MCPToolDefinition(
-            name="reject_action",
-            description="Aborts a proposed action draft.",
-            inputSchema=MCPToolParameter(
-                properties={
-                    "draft_id": {"type": "string", "description": "ID of the action draft"},
-                    "approver": {"type": "string", "description": "Username of the rejector"},
-                },
-                required=["draft_id"],
-            ),
-        ),
         MCPToolDefinition(
             name="scan_api_security",
             description="Autonomous adversarial exploit engine probe for OWASP API Top 10 vulnerabilities (BOLA/BFLA).",
@@ -87,8 +40,10 @@ class PrometheusMCPServer:
                 properties={
                     "target_url": {"type": "string", "description": "Target base URL to scan"},
                     "spec_url": {"type": "string", "description": "OpenAPI spec URL or path"},
+                    "target_dir": {"type": "string", "description": "Optional local source directory for static route extraction and AST auto-patching"},
                     "auth_header_alpha": {"type": "string", "description": "Victim tenant auth token"},
                     "auth_header_beta": {"type": "string", "description": "Attacker tenant auth token"},
+                    "seed_params": {"type": "object", "description": "Seeded path parameter values"},
                 },
                 required=["target_url"],
             ),
@@ -102,6 +57,7 @@ class PrometheusMCPServer:
                     "allowed_methods": {"type": "array", "items": {"type": "string"}, "description": "Allowed methods/tools"},
                     "allowed_resources": {"type": "array", "items": {"type": "string"}, "description": "Scoped resource IDs"},
                     "ttl_seconds": {"type": "integer", "description": "TTL in seconds (max 60s)"},
+                    "tenant_id": {"type": "string", "description": "Enforced tenant boundary ID"},
                 },
                 required=["subject"],
             ),
@@ -129,6 +85,69 @@ class PrometheusMCPServer:
                     "resource_id": {"type": "string", "description": "Target resource ID"},
                 },
                 required=["capability_token", "action_permit", "target_op", "resource_id"],
+            ),
+        ),
+        MCPToolDefinition(
+            name="inspect_agentic_payload",
+            description="Evaluates an MCP tool call or agent payload against the 2026 OWASP Agentic Top 10 (ASI01-ASI10) and CoSAI guardrails.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "tool_name": {"type": "string", "description": "Target tool name being invoked"},
+                    "arguments": {"type": "object", "description": "Tool arguments dictionary"},
+                    "prompt_context": {"type": "string", "description": "Optional prompt or RAG context"},
+                    "agent_id": {"type": "string", "description": "Non-human agent identifier"},
+                    "server_id": {"type": "string", "description": "Target MCP server ID"},
+                },
+                required=["tool_name"],
+            ),
+        ),
+        MCPToolDefinition(
+            name="prometheus_immunology_check",
+            description="Event-driven Continuous Immunology sweep: queries live THN RSS and OSV.dev advisory streams and verifies AST/source reachability in a target repository.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "target_dir": {"type": "string", "description": "Local repository directory path to analyze"},
+                },
+                required=["target_dir"],
+            ),
+        ),
+        MCPToolDefinition(
+            name="prometheus_synthesize_patch",
+            description="Contextual SWE Agent program repair: synthesizes an idiomatic code patch, verifies compilation, and generates a ContextualPatchPR.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "target_dir": {"type": "string", "description": "Repository root directory"},
+                    "target_file": {"type": "string", "description": "Relative path to target source file"},
+                    "target_endpoint": {"type": "string", "description": "Vulnerable HTTP endpoint path"},
+                    "http_method": {"type": "string", "description": "HTTP method (GET, POST, DELETE, etc.)"},
+                    "vector": {"type": "string", "description": "Vulnerability category (BOLA_IDOR, BFLA, RACE_CONDITION, etc.)"},
+                },
+                required=["target_file", "target_endpoint"],
+            ),
+        ),
+        MCPToolDefinition(
+            name="prometheus_verify_exposure",
+            description="Verifies whether a package advisory or route is reachable in the repository call-graph and live staging environment.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "target_dir": {"type": "string", "description": "Local repository directory path"},
+                    "package_name": {"type": "string", "description": "Package name to trace in AST call-graph"},
+                    "target_url": {"type": "string", "description": "Optional live staging URL for runtime probe verification"},
+                },
+                required=["target_dir", "package_name"],
+            ),
+        ),
+        MCPToolDefinition(
+            name="prometheus_generate_poc",
+            description="Generates a standalone, token-redacted Python httpx PoC script and cURL command for a confirmed vulnerability.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "http_method": {"type": "string", "description": "HTTP method (GET, POST, DELETE, etc.)"},
+                    "target_url": {"type": "string", "description": "Full target endpoint URL"},
+                    "headers": {"type": "object", "description": "Optional HTTP headers dictionary"},
+                    "body": {"type": "object", "description": "Optional JSON request body"},
+                },
+                required=["http_method", "target_url"],
             ),
         ),
     ]
@@ -180,7 +199,7 @@ class PrometheusMCPServer:
                         "protocolVersion": "2024-11-05",
                         "serverInfo": {
                             "name": "prometheus-mcp-server",
-                            "version": "0.1.0",
+                            "version": "2.0.0",
                         },
                         "capabilities": {
                             "tools": {"listChanged": True},
@@ -233,48 +252,7 @@ class PrometheusMCPServer:
             ).model_dump()
 
     async def _execute_tool(self, tool_name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        if tool_name == "get_daily_digest":
-            from prometheus.workflows.prometheus_flow import PrometheusWorkflow
-            user = UserContext(
-                user_id=args.get("user_id", "mcp-user"),
-                username=args.get("username", "alex-lead"),
-                is_authenticated=True,
-                org_scopes=set(args.get("scopes", ["engineering", "platform"])),
-            )
-            result = await PrometheusWorkflow.run(
-                user=user,
-                query=args.get("query", "Scan cross-squad telemetry for active sprint blockers"),
-            )
-            return {"content": [{"type": "text", "text": json.dumps(result.model_dump(), default=str)}]}
-
-        elif tool_name == "list_active_blockers":
-            blockers = await state_store.get_active_blockers()
-            return {"content": [{"type": "text", "text": json.dumps([b.model_dump() for b in blockers], default=str)}]}
-
-        elif tool_name == "list_pending_actions":
-            drafts = await state_store.list_drafts(status=DraftStatus.PENDING)
-            return {"content": [{"type": "text", "text": json.dumps([d.model_dump() for d in drafts], default=str)}]}
-
-        elif tool_name == "approve_action":
-            draft_id = args.get("draft_id")
-            approver = args.get("approver", "mcp-user")
-            res = await SlackTools.dispatch_approved_action(draft_id, approver)
-            return {"content": [{"type": "text", "text": json.dumps(res, default=str)}]}
-
-        elif tool_name == "reject_action":
-            draft_id = args.get("draft_id")
-            approver = args.get("approver", "mcp-user")
-            updated = await state_store.update_draft_status(
-                draft_id=draft_id,
-                status=DraftStatus.REJECTED,
-                approver=approver,
-                result="Action rejected via MCP.",
-            )
-            if not updated:
-                raise ValueError(f"Draft '{draft_id}' not found.")
-            return {"content": [{"type": "text", "text": json.dumps({"status": "rejected", "draft_id": draft_id})}]}
-
-        elif tool_name == "scan_api_security":
+        if tool_name == "scan_api_security":
             from prometheus.pentest.service import PentestExecutionService, PentestScanRequest
             target_url = args.get("target_url")
             if not target_url:
@@ -282,8 +260,10 @@ class PrometheusMCPServer:
             scan_req = PentestScanRequest(
                 target_url=target_url,
                 spec_url=args.get("spec_url"),
+                target_dir=args.get("target_dir"),
                 auth_header_alpha=args.get("auth_header_alpha"),
                 auth_header_beta=args.get("auth_header_beta"),
+                seed_params=args.get("seed_params"),
             )
             scan_res = await PentestExecutionService.execute_scan(scan_req)
             return {"content": [{"type": "text", "text": json.dumps(scan_res.model_dump(), default=str)}]}
@@ -293,11 +273,13 @@ class PrometheusMCPServer:
             allowed_methods = args.get("allowed_methods", ["GET"])
             allowed_resources = args.get("allowed_resources", ["*"])
             ttl = args.get("ttl_seconds", 60)
+            tenant_id = args.get("tenant_id")
             token = self.hypervisor.token_authority.mint_token(
                 subject=subject,
                 allowed_methods=allowed_methods,
                 allowed_resource_ids=allowed_resources,
                 ttl_seconds=ttl,
+                tenant_id=tenant_id,
             )
             return {"content": [{"type": "text", "text": json.dumps(token.model_dump(), default=str)}]}
 
@@ -341,6 +323,147 @@ class PrometheusMCPServer:
             if denial:
                 return {"content": [{"type": "text", "text": json.dumps({"verified": False, "denial": denial.model_dump()}, default=str)}]}
             return {"content": [{"type": "text", "text": json.dumps({"verified": True, "permit_id": permit.permit_id if permit else None}, default=str)}]}
+
+        elif tool_name == "inspect_agentic_payload":
+            from prometheus.security.agentic_owasp import agentic_owasp_engine, AgenticInspectionRequest
+            req = AgenticInspectionRequest(
+                tenant_id=args.get("tenant_id", "default_enterprise"),
+                agent_id=args.get("agent_id", "mcp-agent"),
+                server_id=args.get("server_id", "prometheus-local-mcp"),
+                tool_name=args.get("tool_name", "unknown_tool"),
+                arguments=args.get("arguments", {}),
+                prompt_context=args.get("prompt_context"),
+                delegation_depth=int(args.get("delegation_depth", 0)),
+                has_scoped_nhi_token=bool(args.get("has_scoped_nhi_token", True)),
+            )
+            res = agentic_owasp_engine.inspect_tool_invocation(req)
+            return {"content": [{"type": "text", "text": json.dumps(res.model_dump(), default=str)}]}
+
+        elif tool_name == "prometheus_immunology_check":
+            from prometheus.pentest.immunology import ContinuousImmunologyEngine
+            target_dir = args.get("target_dir") or os.getcwd()
+            engine = ContinuousImmunologyEngine()
+            res = await engine.run_immunology_sweep(target_dir)
+            return {"content": [{"type": "text", "text": json.dumps(res, default=str)}]}
+
+        elif tool_name == "prometheus_synthesize_patch":
+            from prometheus.pentest.swe_patcher import ContextualSWERepairAgent
+            from prometheus.pentest.models import ExploitProof, HttpMethod, Severity, VulnerabilityCategory
+
+            target_dir = args.get("target_dir") or os.getcwd()
+            target_file = args.get("target_file", "app/api/routes.py")
+            target_endpoint = args.get("target_endpoint", "/api/v1/invoices/{invoice_id}")
+            http_method_str = str(args.get("http_method", "GET")).upper()
+            method_enum = HttpMethod(http_method_str) if http_method_str in HttpMethod.__members__ else HttpMethod.GET
+            vector_str = str(args.get("vector", "BOLA_IDOR")).upper()
+            vec_enum = VulnerabilityCategory.BFLA if "BFLA" in vector_str else VulnerabilityCategory.BOLA_IDOR
+
+            full_path = os.path.join(target_dir, target_file) if not os.path.isabs(target_file) else target_file
+            if os.path.isfile(full_path):
+                with open(full_path, "r", encoding="utf-8") as f:
+                    source_code = f.read()
+            else:
+                source_code = (
+                    f'@app.{method_enum.value.lower()}("{target_endpoint}")\n'
+                    "async def handler(resource_id: str, current_user: UserSession = Depends(get_current_user)):\n"
+                    "    resource = DB.get(resource_id)\n"
+                    "    if not resource:\n"
+                    '        raise HTTPException(status_code=404, detail="Not found")\n'
+                    "    return resource\n"
+                )
+
+            proof = ExploitProof(
+                is_vulnerable=True,
+                vector=vec_enum,
+                severity=Severity.HIGH,
+                target_endpoint=target_endpoint,
+                http_method=method_enum,
+                http_status_code=200,
+                curl_command=f"curl -X {method_enum.value} http://localhost:8000{target_endpoint}",
+                remediation_guidance="Enforce tenant ownership and RBAC policy.",
+                execution_time_ms=5.0,
+            )
+            swe_agent = ContextualSWERepairAgent(target_dir=target_dir)
+            patch_res, contextual_pr = await swe_agent.synthesize_contextual_patch(
+                original_code=source_code,
+                proof=proof,
+                target_file=target_file,
+            )
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "patch": patch_res.model_dump(),
+                                "contextual_pr": contextual_pr.model_dump(),
+                            },
+                            default=str,
+                        ),
+                    }
+                ]
+            }
+
+        elif tool_name == "prometheus_verify_exposure":
+            from prometheus.pentest.immunology import ContinuousImmunologyEngine
+            target_dir = args.get("target_dir") or os.getcwd()
+            package_name = str(args.get("package_name", "")).strip()
+            if not package_name:
+                raise ValueError("Missing required argument: 'package_name'")
+            reachable_files, call_sites = ContinuousImmunologyEngine.trace_call_graph_reachability(
+                target_dir=target_dir,
+                package_name=package_name,
+            )
+            payload = {
+                "target_dir": target_dir,
+                "package_name": package_name,
+                "is_reachable_in_repo": len(reachable_files) > 0,
+                "reachable_files": reachable_files,
+                "call_sites": call_sites,
+            }
+            return {"content": [{"type": "text", "text": json.dumps(payload, default=str)}]}
+
+        elif tool_name == "prometheus_generate_poc":
+            from prometheus.pentest.exploit_prober import ExploitProber
+            from prometheus.pentest.models import ExploitProbeRequest, HttpMethod, VulnerabilityCategory
+            from prometheus.pentest.proof_validator import ProofValidator
+
+            http_method_str = str(args.get("http_method", "GET")).upper()
+            method_enum = HttpMethod(http_method_str) if http_method_str in HttpMethod.__members__ else HttpMethod.GET
+            target_url = str(args.get("target_url", "http://localhost:8000/api/v1/resource")).strip()
+            headers = args.get("headers") if isinstance(args.get("headers"), dict) else {}
+            body = args.get("body") if isinstance(args.get("body"), dict) else None
+
+            py_script = ExploitProber.generate_python_poc(
+                method=method_enum.value,
+                url=target_url,
+                headers=headers,
+                body=body,
+            )
+            validator = ProofValidator(redact_tokens=True)
+            req = ExploitProbeRequest(
+                target_url=target_url,
+                method=method_enum,
+                headers=headers,
+                body=body,
+                vector=VulnerabilityCategory.BOLA_IDOR,
+                hypothesis="MCP PoC generation",
+            )
+            curl_cmd = validator.generate_curl_command(req)
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "reproduction_script_python": py_script,
+                                "reproduction_curl": curl_cmd,
+                            },
+                            default=str,
+                        ),
+                    }
+                ]
+            }
 
         else:
             raise ValueError(f"Unknown MCP tool: {tool_name}")

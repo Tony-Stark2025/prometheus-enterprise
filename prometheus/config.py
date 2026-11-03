@@ -1,6 +1,6 @@
 """
-Configuration module for Prometheus Enterprise Observability Platform.
-Standardized on Gemini 3.7 Flash via Vertex AI & Gemini Enterprise Agent Platform (Agent Engine).
+Configuration module for Prometheus Enterprise: Autonomous API Security & Capability Hypervisor.
+Standardized on Gemini 3.7 Flash via Vertex AI & Multi-Provider LLM Integration.
 """
 
 from typing import List, Optional, Union, Any
@@ -16,25 +16,25 @@ class Settings(BaseSettings):
     )
 
     # Core Application Settings
-    app_name: str = "Prometheus Chief of Staff"
+    app_name: str = "Prometheus Enterprise: Autonomous API Security & Capability Hypervisor"
     environment: str = "development"
     log_level: str = "INFO"
     host: str = "0.0.0.0"
     port: int = 8000
     allow_insecure_admin: bool = False
 
-    # Google Cloud & Vertex AI / Gemini Enterprise Agent Platform (Agent Engine)
+    # Google Cloud & Vertex AI Platform
     use_vertex_ai: bool = True
     gcp_project_id: Optional[str] = None
     gcp_location: str = "us-central1"
     agent_engine_app_id: Optional[str] = None
     agent_engine_location: str = "us-central1"
-    gemini_request_timeout_seconds: float = 8.0
+    gemini_request_timeout_seconds: float = 15.0
 
     # Multi-Provider LLM Integration (In-Service Subscriptions & BYOK)
     llm_provider: str = "auto"  # 'auto', 'vertex', 'gemini', 'anthropic', 'openai', 'copilot', 'gateway'
     llm_model: Optional[str] = None  # Explicit override; defaults to provider-optimal model
-    llm_request_timeout_seconds: float = 8.0
+    llm_request_timeout_seconds: float = 15.0
 
     # BYOK (Bring Your Own Key) Direct Credentials
     gemini_api_key: Optional[str] = None
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     ai_gateway_url: Optional[str] = None
     ai_gateway_token: Optional[str] = None
 
-    # Unified Foundation Model (Standardized exclusively on Gemini 3.7 Flash)
+    # Unified Foundation Model
     gemini_model: str = "gemini-3.7-flash"
     gemini_model_primary: str = "gemini-3.7-flash"
 
@@ -61,42 +61,8 @@ class Settings(BaseSettings):
     # Persistence / Database (SQLite for local / free-tier; Cloud SQL / PostgreSQL for production)
     database_url: str = "sqlite+aiosqlite:///./prometheus_state.db"
 
-    # Observability & Thresholds
-    stale_pr_hours_threshold: int = 1
-    ci_failure_threshold_count: int = 2
-    default_org_scope: Union[List[str], str] = Field(
-        default_factory=lambda: ["engineering", "platform"]
-    )
-
-    # Human-in-the-Loop (HITL) Enforcement
-    enforce_human_in_the_loop: bool = True
-
     # External Integrations
     github_token: Optional[str] = None
-    github_repos: Union[List[str], str] = Field(default_factory=list)
-    jira_api_token: Optional[str] = None
-    jira_instance_url: Optional[str] = None
-    jira_user_email: Optional[str] = None
-    jira_project_key: Optional[str] = None
-    slack_bot_token: Optional[str] = None
-    slack_channels: Union[List[str], str] = Field(default_factory=list)
-
-    @field_validator("default_org_scope", "github_repos", "slack_channels", mode="after")
-    @classmethod
-    def normalize_list(cls, v: Any) -> List[str]:
-        if isinstance(v, str):
-            if not v.strip():
-                return []
-            if v.startswith("[") and v.endswith("]"):
-                import json
-                try:
-                    return json.loads(v)
-                except Exception:
-                    pass
-            return [item.strip() for item in v.split(",") if item.strip()]
-        elif isinstance(v, list):
-            return [str(item).strip() for item in v if str(item).strip()]
-        return []
 
     @classmethod
     def resolve_secret_manager_uri(cls, value: Optional[str], project_id: Optional[str] = None) -> Optional[str]:
@@ -128,10 +94,6 @@ class Settings(BaseSettings):
 
     @field_validator(
         "github_token",
-        "jira_api_token",
-        "jira_instance_url",
-        "jira_user_email",
-        "slack_bot_token",
         "gemini_api_key",
         "anthropic_api_key",
         "openai_api_key",

@@ -50,3 +50,11 @@ htmlcov/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Local Runtime Data & Scan Outputs
+.vite/
+data/
+*_report.sarif.json
+*_pr_comment.md
+*_auto_fix.patch
+

@@ -178,10 +178,11 @@ class TokenAuthority:
         child_expires_at = min(now + child_ttl, parent_token.scope.expires_at)
         child_id = f"tok_{uuid.uuid4().hex[:16]}"
 
+        effective_tenant_id = tenant_id if tenant_id is not None else parent_token.scope.tenant_id
         child_scope = ScopeBoundary(
             allowed_methods=effective_methods,
             allowed_resource_ids=effective_resources,
-            tenant_id=parent_token.scope.tenant_id,
+            tenant_id=effective_tenant_id,
             max_ttl_seconds=int(child_ttl),
             issued_at=now,
             expires_at=child_expires_at,

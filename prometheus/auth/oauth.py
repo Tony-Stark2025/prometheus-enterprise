@@ -19,12 +19,19 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET', '')
 GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'https://prometheus-chief-of-staff-135010851380.us-central1.run.app/api/v1/auth/google/callback')
 
-def create_session_token(user_id: str, email: str, tenant_id: str, scopes: list) -> str:
+def create_session_token(
+    user_id: str,
+    email: str,
+    tenant_id: str,
+    scopes: Optional[list] = None,
+    roles: Optional[list] = None,
+) -> str:
     payload = {
         'sub': user_id,
         'email': email,
         'tenant_id': tenant_id,
-        'scopes': scopes,
+        'scopes': scopes or ['engineering', 'platform'],
+        'roles': roles or ['operator'],
         'exp': datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
         'iat': datetime.now(timezone.utc)
     }

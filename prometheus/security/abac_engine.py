@@ -31,7 +31,7 @@ CLEARANCE_HIERARCHY = {
     "L2": 2,  # Associate Engineer
     "L3": 3,  # Senior Engineer / PM
     "L4": 4,  # Staff / Principal / Architect
-    "L5": 5,  # Chief of Staff / VP / CISO
+    "L5": 5,  # Executive / VP / CISO
 }
 
 

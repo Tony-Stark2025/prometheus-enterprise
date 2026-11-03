@@ -1,265 +1,143 @@
-# 🔥 Prometheus: Enterprise Workstream Observability & Asynchronous Orchestration Platform
+# 🔥 Prometheus Enterprise: Autonomous API Penetration Testing & Runtime Capability Hypervisor
 
-[![Enterprise Grade](https://img.shields.io/badge/Enterprise-Fleet_Observability-blueviolet.svg)]()
+[![Enterprise Grade](https://img.shields.io/badge/Enterprise-API_Security-blueviolet.svg)]()
 [![Google GenAI SDK](https://img.shields.io/badge/Google_GenAI-Gemini_3.7_Flash-4285F4.svg)](https://ai.google.dev/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-stdio_%7C_SSE-00C7B7.svg)]()
-[![Gemini Enterprise Agent Platform](https://img.shields.io/badge/Agent_Engine-Vertex_AI-34A853.svg)](https://cloud.google.com/vertex-ai)
-[![Security](https://img.shields.io/badge/security-ABAC_%7C_Model_Armor-critical.svg)]()
-[![HITL](https://img.shields.io/badge/HITL-Propose%2C_Don't_Impose-FF6F00.svg)]()
+[![Security](https://img.shields.io/badge/security-ABAC_%7C_Capability_Hypervisor-critical.svg)]()
+[![CI/CD SLA](https://img.shields.io/badge/CI%2FCD_Gate-%3C85s_SLA-emerald.svg)]()
 
-> **Autonomous AI Chief of Staff & Engineering Fleet Intelligence**  
-> *Correlating cross-functional engineering telemetry (GitHub, Jira, Slack, CI/CD), isolating data via deterministic ABAC/RLS, and proposing contextual remediation actions for human sign-off ("Propose, Don't Impose") on Google Cloud Vertex AI and Cloud Run.*
+> **The Zero False-Positive API Vulnerability Discovery & Autonomous Remediation Engine**  
+> *Transforming OpenAPI specifications into topologically sorted route dependency DAGs, verifying BOLA/BFLA exploitability via cryptographic canary reflection defense, synthesizing certified AST source repairs with CEGIS dual-pass verifiers, and enforcing runtime tool safety via an inline cryptographic Capability Hypervisor.*
 
 ---
 
-## 🏛️ System Architecture & Sub-Agent Fleet
+## 🏛️ System Architecture
 
 ```text
-                          [ User Query / 08:00 AM Cron / Webhook / MCP ]
-                                                │
-                                                ▼
-                                ┌───────────────────────────────────┐
-                                │    Router & Guardrail Agent       │
-                                │   - ABAC & Scope Perimeter Check  │
-                                │   - Prompt Defense / PII Filter   │
-                                └────────────────┬──────────────────┘
-                                                 │
-                         ┌───────────────────────┼──────────────────────┐
-                         ▼                       ▼                      ▼
-             ┌──────────────────────┐ ┌───────────────────┐ ┌──────────────────────┐
-             │ Git & CI/CD Ingestion│ │  Project Tracker  │ │ Workstream Ingestion │
-             │ - GitHub / GitLab    │ │  - Jira / Linear  │ │ - Public Slack/Teams │
-             │ - PR latency / CI    │ │  - Epics/Blockers │ │ - Calendar Metadata  │
-             └──────────┬───────────┘ └─────────┬─────────┘ └──────────┬───────────┘
-                         │                      │                      │
-                         └──────────────────────┼──────────────────────┘
-                                                │ (Aggregated Telemetry via MCP)
-                                                ▼
-                                ┌───────────────────────────────────┐
-                                │    Synthesis & Blocker Agent      │
-                                │    - Gemini 3.7 Flash on Vertex AI│
-                                │    - Enterprise Async Execution   │
-                                │    - Root-Cause Bottleneck Finder │
-                                └────────────────┬──────────────────┘
-                                                 │
-                                                 ▼
-                                ┌───────────────────────────────────┐
-                                │     Action & Drafting Agent       │
-                                │     - "Propose, Don't Impose"     │
-                                │     - Slack Block Kit Action Cards│
-                                └────────────────┬──────────────────┘
-                                                 │
-                                                 ▼
-                                   [ Human Approval Checkpoint ]
-                                   (Approve / Edit / Discard)
-                                                 │
-                                     ┌───────────┴───────────┐
-                                     ▼                       ▼
-                            [ Approved: Dispatch ]   [ Rejected: Abort ]
-                             - Slack DM / Jira SDK
+       [ CI/CD Pipeline / GitHub Actions / Developer Terminal / CLI / MCP ]
+                                         │
+                                         ▼
+                 ┌──────────────────────────────────────────────┐
+                 │          API Lineage Graph Engine            │
+                 │   - OpenAPI 3.x Ingestion & Schema Parsing   │
+                 │   - Tarjan SCC Topological Condensation      │
+                 │   - State Synthesizer (Victims / Seed Pairs) │
+                 └───────────────────────┬──────────────────────┘
+                                         │
+                                         ▼
+                 ┌──────────────────────────────────────────────┐
+                 │       Autonomous Exploit Prober Gate         │
+                 │   - Dual-Tenant Persona Probing (BOLA/BFLA)  │
+                 │   - Reflection Defense (Cryptographic Canary)│
+                 │   - SSRF Multi-Tier Rebinding Defense        │
+                 │   - Strict Zero False-Positive Invariant     │
+                 └───────────────────────┬──────────────────────┘
+                                         │
+                                         ▼
+                 ┌──────────────────────────────────────────────┐
+                 │     CEGIS Dual-Pass Program Repair           │
+                 │   - Gemini 3.7 Flash Guided AST Rewriter     │
+                 │   - Pass 1: Neutralize Attacker (403/404)    │
+                 │   - Pass 2: Preserve Victim Workflows (200)  │
+                 │   - Automated Unified Git Patch Generation   │
+                 └───────────────────────┬──────────────────────┘
+                                         │
+                                         ▼
+                 ┌──────────────────────────────────────────────┐
+                 │         Inline Capability Hypervisor         │
+                 │   - Pre-State Witness H(S) Ledger (HMAC)     │
+                 │   - Monotonic Single-Use Action Permits      │
+                 │   - Structured Semantic Denial Envelopes     │
+                 │   - Fail-Closed Policy Enforcement Engine    │
+                 └──────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🌟 Enterprise Fleet Architectural Pillars
+## ⚡ Core Pillars
 
-| Pillar | Platform Implementation | Capabilities |
-| :--- | :--- | :--- |
-| **Discovery & Lifecycle** | **Agent Registry** (`app/registry/`) | Central cataloging, schema validation, tool binding, and versioning for all 6 sub-agents. |
-| **Core Execution & State** | **Async DAG + Memory Bank** (`app/memory/`) | Checkpointing, multi-week blocker lifecycles, SQLite persistence, and human approval state machines. |
-| **Security & Governance** | **ABAC Perimeter & Model Armor** (`app/security/`) | Deterministic scope validation $P(U,R)$, PII redaction (tokens, emails, phone numbers), and prompt injection filters. |
-| **Observability & Protocols** | **Hybrid MCP + Structured Traces** (`app/mcp/`) | Dual `stdio` & `SSE` Model Context Protocol transports + OpenTelemetry trace headers. |
+### 1. Zero False-Positive Exploitation (Reflection Defense)
+Traditional DAST tools flood security teams with false alarms based on HTTP status codes. Prometheus enforces a **cryptographic reflection defense**:
+- High-entropy canaries are harvested from legitimate tenant sessions.
+- An exploit is confirmed **only if** the unauthorized actor retrieves the exact private canary belonging to the victim tenant.
+- Eliminates 100% of status-code hallucinations and benign 200 OK reflections.
 
----
+### 2. Autonomous Program Repair (CEGIS Dual-Pass AST Verification)
+When a flaw is verified, Prometheus does not just alert; it generates and validates source code fixes:
+- Parses target source code into Abstract Syntax Trees (AST).
+- Synthesizes tenant isolation guards and authorization decorators using Gemini 3.7 Flash.
+- Evaluates candidates against a **Counterexample-Guided Inductive Synthesis (CEGIS)** dual-pass test oracle:
+  - **Pass 1 (Attacker Invariant)**: Unauthorized probe must yield `403 Forbidden` or `404 Not Found`.
+  - **Pass 2 (Victim Invariant)**: Legitimate owner requests must continue to return `200 OK` with valid data.
+- Outputs clean, verified unified diff patches ready for merge.
 
-## ⚡ Vertex AI & Gemini Enterprise Agent Platform
+### 3. Inline Capability Hypervisor & Token Authority
+To protect APIs from autonomous tool and agent abuse at runtime, Prometheus provides an inline gateway:
+- **Capability Tokens**: Cryptographically signed, scoped tokens defining authorized operations.
+- **Pre-State Witnesses $H(S)$**: Hashes and validates target resource state prior to mutation to prevent TOCTOU race conditions.
+- **Single-Use Action Permits**: Monotonic, tamper-evident action permits that prevent replay attacks.
+- **Semantic Denial Envelopes**: Structured recovery payloads returned upon denial, detailing the exact violated invariant and remediation guidance.
 
-Prometheus is unified exclusively on **Gemini 3.7 Flash** powered by Google Cloud Vertex AI & the Gemini Enterprise Agent Platform:
-
-- **Enterprise IAM & ADC**: Uses native Google Cloud Application Default Credentials (ADC) and IAM service accounts with zero raw API keys exposed.
-- **Non-Blocking Async Engine**: Native `client.aio.models.generate_content()` execution with timeout guards preventing event loop starvation.
-- **Telemetry Delta Caching**: Inputs are hashed (`SHA-256`) to return cached digests for unchanged telemetry, saving token consumption and latency.
-- **Agent Engine Hosting**: Designed to deploy natively onto the Gemini Enterprise Agent Platform (Agent Engine).
-
----
-
-## 📁 Repository Layout
-
-```text
-prometheus/
-├── app/
-│   ├── __init__.py
-│   ├── config.py                 # Gemini 3.7 Flash, Vertex AI & Agent Engine settings
-│   ├── main.py                   # FastAPI REST API, MCP SSE Stream & CLI runner
-│   ├── scheduler.py              # Background 08:00 AM async cron scheduler
-│   ├── agents/
-│   │   ├── __init__.py
-│   │   ├── router_agent.py       # ABAC & Guardrail security perimeter
-│   │   ├── git_agent.py          # GitHub/CI ingestion agent
-│   │   ├── jira_agent.py         # Jira/Linear project tracker agent
-│   │   ├── workstream_agent.py   # Slack & calendar ingestion agent
-│   │   ├── synthesis_agent.py    # Multi-domain correlation (Gemini 3.7 Flash)
-│   │   └── action_agent.py       # HITL action drafter with Slack Block Kit
-│   ├── llm/
-│   │   ├── __init__.py
-│   │   └── gemini_pool.py        # Vertex AI Gemini 3.7 Flash engine & cache
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   ├── protocol.py           # MCP JSON-RPC 2.0 schemas
-│   │   ├── server.py             # Prometheus MCP Server (stdio & SSE)
-│   │   └── client.py             # MCP Client adapter for external tools
-│   ├── registry/
-│   │   ├── __init__.py
-│   │   └── agent_registry.py     # Sub-Agent cataloging & discovery
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── github_tools.py       # Git PR & CI status tools
-│   │   ├── jira_tools.py         # Project management tools
-│   │   └── slack_tools.py        # Communication drafting & dispatch tools
-│   ├── security/
-│   │   ├── __init__.py
-│   │   ├── abac_guard.py         # Attribute-Based Access Control (ABAC/RLS)
-│   │   └── guardrails.py         # Inline prompt defense & PII sanitizer
-│   ├── memory/
-│   │   ├── __init__.py
-│   │   └── state_store.py        # Durable SQLite session checkpointing & audit store
-│   └── workflows/
-│       ├── __init__.py
-│       └── prometheus_flow.py    # Multi-agent asynchronous orchestration DAG
-├── tests/
-│   ├── mock_telemetry.py         # Test fixtures & telemetry generators
-│   └── test_workflow.py          # Hermetic multi-agent & security test suite
-├── .github/
-│   └── workflows/ci.yml          # GitHub Actions automated CI pipeline
-├── deploy_gcp.sh                 # Deployment script for Gemini Enterprise Agent Engine
-├── Dockerfile                    # Multi-stage production containerfile
-├── Procfile                      # PaaS process definition
-├── requirements.txt              # Production & test dependencies
-├── PROJECT_SPEC.md               # Detailed system design specification
-└── .env.example                  # Environment variables template
-```
+### 4. Enterprise ABAC & Security Perimeter
+- Sub-millisecond Attribute-Based Access Control (ABAC) evaluation engine.
+- Persistent audit logging with microsecond-level timing and deterministic clearance verification.
+- SSRF defense blocking RFC 1918 subnets, cloud metadata services (AWS IPv6 `fd00:ec2::254`, GCP, Azure, OCI), and DNS rebinding vectors.
 
 ---
 
-## 🚀 Quickstart & Setup
+## 🚀 Quickstart
 
-### 1. Installation
+### Prerequisites
+- Python 3.11+
+- Virtual environment with dependencies installed:
+  ```bash
+  pip install -e .
+  ```
 
+### Run CI/CD Vulnerability Scan
+Execute an autonomous vulnerability assessment against a live OpenAPI endpoint:
 ```bash
-# Clone repository
-git clone https://github.com/Tony-Stark2025/prometheus.git
-cd prometheus
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+python -m prometheus.cli_scan \
+  --target-url http://localhost:8000 \
+  --spec-url /openapi.json \
+  --sla-budget-s 85.0 \
+  --output-sarif prometheus-report.sarif
 ```
 
-### 2. Configure Environment
-
+### Run the Prometheus Security Engine Service
 ```bash
-cp .env.example .env
-# Authenticate with Google Cloud
-gcloud auth application-default login
+uvicorn prometheus.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+Access the interactive dashboard at `http://localhost:8000/dashboard` and OpenAPI documentation at `http://localhost:8000/docs`.
 
-### 3. Run the Interactive CLI Demo
-
-```bash
-python app/main.py --cli
-```
-
-### 4. Run the REST API & MCP Server
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-- **OpenAPI Interactive Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **MCP Server-Sent Events Endpoint**: `http://localhost:8000/mcp/sse`
-- **Agent Registry Discovery**: `http://localhost:8000/api/v1/registry/agents`
-
----
-
-## 🌐 Live Google Cloud Deployments
-
-| Component | Target Infrastructure | Live GCP Resource / URL | Status |
-| :--- | :--- | :--- | :--- |
-| **Multi-Agent Reasoning Fleet** | **Vertex AI Agent Engine** (`us-central1`) | `projects/135010851380/locations/us-central1/reasoningEngines/954065480874721280` | `ACTIVE / SERVING` |
-| **FastAPI Backend & MCP Server** | **Google Cloud Run** (`us-central1`) | [prometheus-chief-of-staff-135010851380.us-central1.run.app](https://prometheus-chief-of-staff-135010851380.us-central1.run.app) | `ACTIVE / 100% TRAFFIC` |
-| **Interactive Executive Dashboard** | **Cloud Run Web UI** | [prometheus-chief-of-staff-135010851380.us-central1.run.app/dashboard](https://prometheus-chief-of-staff-135010851380.us-central1.run.app/dashboard) | `200 OK` |
-| **Model Context Protocol (MCP)** | **Cloud Run SSE Endpoint** | `POST https://prometheus-chief-of-staff-135010851380.us-central1.run.app/mcp/sse` | `JSON-RPC 2.0` |
-| **Foundation Model** | **Gemini 3.7 Flash** | Standardized Vertex AI Model | `SERVING` |
-
----
-
-## 🔌 Connecting to Claude Desktop / Antigravity via MCP
-
-Add Prometheus to your MCP client configuration (e.g. `claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "prometheus-cloud": {
-      "url": "https://prometheus-chief-of-staff-135010851380.us-central1.run.app/mcp/sse"
-    },
-    "prometheus-local": {
-      "command": "python",
-      "args": ["-m", "prometheus.mcp.server"]
-    }
-  }
-}
-```
-
----
-
-## ☁️ Deployment on Google Cloud (Agent Engine & Cloud Run)
-
-### 1. Deploy Reasoning Engine to Vertex AI Agent Engine:
-```bash
-python deploy_agent_engine.py --project gen-lang-client-0942141479 --location us-central1
-```
-
-### 2. Deploy Container to Google Cloud Run:
-```bash
-gcloud run deploy prometheus-chief-of-staff \
-    --source . \
-    --region=us-central1 \
-    --allow-unauthenticated \
-    --port=8080 \
-    --set-env-vars="USE_VERTEX_AI=true,GCP_PROJECT_ID=gen-lang-client-0942141479,GCP_LOCATION=us-central1,AGENT_ENGINE_APP_ID=projects/135010851380/locations/us-central1/reasoningEngines/954065480874721280,ENVIRONMENT=production,MCP_ENABLED=true"
-```
-
-### 3. Verify Live Deployments Programmatically:
-```bash
-# Verify live Vertex AI Reasoning Engine
-python deploy_agent_engine.py --verify-only projects/135010851380/locations/us-central1/reasoningEngines/954065480874721280
-
-# Verify full 157-test matrix
-pytest -v
-```
-
----
-
-## 🔐 Google Secret Manager Integration
-
-Configure secrets securely via Google Secret Manager URIs in `.env` or Cloud Run environment variables:
-```bash
-GITHUB_TOKEN=sm://prometheus-github-token
-JIRA_API_TOKEN=sm://prometheus-jira-token
-SLACK_BOT_TOKEN=sm://prometheus-slack-token
-```
-Prometheus automatically resolves `sm://<secret_id>` directly from Google Cloud Secret Manager at startup with zero secret exposure in logs.
-
----
-
-## 🧪 Testing
-
-Run the comprehensive 5-tier test matrix:
-
+### Run Test Suite
 ```bash
 pytest tests/ -v
 ```
-All 157 tests execute hermetically with zero mock leakage.
+
+---
+
+## 🛡️ Model Context Protocol (MCP) Integration & Live Security Gateway
+
+Prometheus exposes its security engine and hypervisor capabilities as standard MCP tools via both stdio and Server-Sent Events (SSE) transports, and operates as a **Live MCP Reverse-Proxy Security Gateway** (`/api/v1/mcp/gateway/proxy`):
+- `scan_api_security`: Trigger autonomous API discovery and dual-tenant penetration testing.
+- `mint_capability_token`: Mint cryptographically bound capability tokens for agent operations.
+- `request_action_permit`: Request single-use monotonic permits for state-mutating API actions.
+- `verify_action_permit`: Validate an action permit against pre-state witness $H(S)$ prior to mutation.
+- `inspect_agentic_payload`: Evaluate tool calls and RAG context against the **2026 OWASP Agentic Top 10 (`ASI01`–`ASI10`)** and CoSAI DLP guardrails.
+
+---
+
+## 🏢 Commercial SaaS, Multi-Tenant API Keys & Compliance Exports
+
+Built for **Hybrid PLG + Enterprise Sales** (`Starter` \$0/mo, `Pro` \$499/mo, `Enterprise Guard` \$7,500/mo):
+- **Multi-Tenant Scoped API Keys (`/api/v1/saas/api-keys`)**: Mint `prom_live_...` keys hashed with SHA-256 at rest, supporting `X-API-Key` and `Bearer` authentication with per-tenant sliding-window rate limits.
+- **OWASP Agentic Top 10 Shield (`/api/v1/security/agentic/*`)**: Real-time deterministic blocking of Agent Goal Hijack (`ASI01`), Tool Misuse (`ASI02`), Non-Human Identity Abuse (`ASI03`), Supply Chain Schema Poisoning (`ASI04`), Sandbox Escape (`ASI05`), Memory Poisoning (`ASI06`), Unsafe Delegation (`ASI07`), Hallucinated IDs (`ASI08`), Human Trust Exploitation (`ASI09`), and Autonomous Exfiltration (`ASI10`).
+- **Signed Compliance Ledgers (`/api/v1/saas/compliance/export`)**: Generates cryptographically verifiable **EU AI Act Art. 12/15**, **SOC 2 Type II**, and **CoSAI** audit bundles anchored by a SHA-256 Merkle state root and HMAC-SHA256 signature.
+
+---
+
+## 🔒 Security & Compliance
+- **Zero-Mock Policy**: All scan routines, cryptographic verifications, and proxy gates execute real protocols and verifiable payloads.
+- **SSRF Defense-in-Depth**: Strict IP validation with loopback-only override support for local test suites.
+- **Fail-Closed Runtime**: Missing tokens, expired permits, or altered pre-state witnesses result in deterministic denial.

@@ -1,120 +1,92 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Prometheus Documentation — Architecture, Security & Fleet Reference</title>
+  <title>Prometheus Enterprise | Architecture, Security & Documentation</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            obsidian: {
-              950: '#07090e',
-              900: '#0a0d14',
-              850: '#0f141f',
-              800: '#121722',
-              750: '#171d2b',
-              700: '#1c2333',
-              600: '#263044',
-            }
-          }
-        }
-      }
-    }
-  </script>
   <style>
-    body { background-color: #0a0d14; color: #e2e8f0; }
-    .glass-panel { background: rgba(18, 23, 34, 0.88); backdrop-filter: blur(14px); border: 1px solid #1c2333; }
-    .glass-input { background: #0f141f; border: 1px solid #1c2333; color: #f8fafc; }
-    .glass-input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
-    .glow-sapphire { box-shadow: 0 0 30px rgba(59, 130, 246, 0.16); }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0a0d14; }
-    ::-webkit-scrollbar-thumb { background: #1c2333; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b0f17; color: #f8fafc; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .glass-panel { background: rgba(18, 24, 38, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.07); }
+    .glass-input { background: rgba(11, 15, 23, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .glow-sapphire { box-shadow: 0 0 35px -10px rgba(59, 130, 246, 0.15); }
   </style>
 </head>
-<body class="font-sans antialiased min-h-screen flex flex-col selection:bg-blue-600 selection:text-white">
+<body class="min-h-screen flex flex-col antialiased selection:bg-blue-500 selection:text-white">
 
-  <!-- HEADER -->
-  <header class="sticky top-0 z-40 bg-obsidian-900/90 backdrop-blur-md border-b border-obsidian-700">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <div class="flex items-center space-x-3.5">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
-          <i data-lucide="book-open" class="w-5 h-5 text-white"></i>
-        </div>
-        <div>
-          <span class="font-extrabold text-base tracking-wider text-white font-mono">PROMETHEUS</span>
-          <span class="px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/25 ml-2">Documentation</span>
-        </div>
+  <!-- TOP APP HEADER -->
+  <header class="border-b border-slate-800 bg-[#0d121d]/90 backdrop-blur sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+        <i data-lucide="shield-alert" class="w-5 h-5"></i>
       </div>
-      <a href="/dashboard" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-obsidian-800 border border-obsidian-700 hover:bg-obsidian-700 text-xs font-semibold text-white transition">
-        <i data-lucide="arrow-left" class="w-4 h-4"></i>
-        <span>Command Center</span>
+      <div>
+        <h1 class="text-sm font-extrabold tracking-tight text-white font-mono">PROMETHEUS ENTERPRISE</h1>
+        <p class="text-[10px] text-slate-400">Autonomous API Penetration Testing & Capability Hypervisor Documentation</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3 text-xs">
+      <a href="/dashboard" class="px-3 py-1.5 rounded-lg bg-[#121826] hover:bg-[#1a2336] text-slate-300 hover:text-white border border-slate-700 transition flex items-center space-x-1.5 font-medium">
+        <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+        <span>Return to Dashboard</span>
       </a>
     </div>
   </header>
 
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-
+  <!-- MAIN DOCUMENTATION CONTAINER -->
+  <main class="max-w-6xl w-full mx-auto px-6 py-8 space-y-8 flex-1">
+    
     <!-- HERO SECTION -->
-    <div class="glass-panel p-6 rounded-2xl border border-obsidian-700 space-y-2 glow-sapphire">
+    <div class="glass-panel p-6 rounded-2xl border border-slate-800 space-y-2 glow-sapphire">
       <div class="flex items-center space-x-2 text-xs font-mono text-blue-400">
         <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-        <span>Vertex AI Reasoning Engine • Gemini 3.7 Flash</span>
+        <span>Zero False-Positive Engine • Gemini 3.7 Flash • Inline Hypervisor</span>
       </div>
-      <h1 class="text-2xl font-extrabold text-white">Enterprise Workstream Observability Whitepaper</h1>
+      <h1 class="text-2xl font-extrabold text-white">Prometheus Enterprise Architecture & Technical Specification</h1>
       <p class="text-xs text-slate-300 max-w-3xl leading-relaxed">
-        Prometheus is an autonomous multi-agent platform designed for software engineering fleets. Operating under the guiding principle of <strong>"Propose, Don't Impose"</strong>, it ingests telemetry across GitHub, Jira Cloud, and Slack, synthesizes root-cause blocker dependency graphs, and prepares Human-in-the-Loop action cards.
+        Prometheus Enterprise delivers dual-engine security for modern cloud APIs and AI agent workflows: deterministic vulnerability discovery with cryptographic reflection defense, CEGIS dual-pass AST program repair, and an inline capability hypervisor firewall.
       </p>
     </div>
 
-    <!-- 6-AGENT FLEET SPECS -->
+    <!-- CORE ARCHITECTURAL PILLARS -->
     <div class="space-y-4">
       <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center space-x-2">
         <i data-lucide="cpu" class="w-4 h-4 text-blue-400"></i>
-        <span>Multi-Agent Reasoning Fleet Topology</span>
+        <span>Core Architectural Subsystems</span>
       </h2>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono font-bold text-[10px]">agent-01-router</span>
-          <h4 class="font-bold text-white text-xs">ABAC Perimeter Router</h4>
-          <p class="text-slate-400">Enforces mathematical ABAC predicate P(U,R) and filters incoming prompts against injection patterns and PII.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono font-bold text-[10px]">pentest-lineage</span>
+          <h4 class="font-bold text-white text-xs">API Lineage & Topological Condensation</h4>
+          <p class="text-slate-400">Ingests OpenAPI 3.x specifications and applies Tarjan's SCC algorithm to build a dependency DAG, guaranteeing prerequisite resources are provisioned before dependent endpoints.</p>
         </div>
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono font-bold text-[10px]">agent-02-git</span>
-          <h4 class="font-bold text-white text-xs">Git Telemetry Agent</h4>
-          <p class="text-slate-400">Ingests GitHub PR review latency, stale branches (>48h), and GitHub Actions CI build logs.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono font-bold text-[10px]">reflection-defense</span>
+          <h4 class="font-bold text-white text-xs">Cryptographic Reflection Defense</h4>
+          <p class="text-slate-400">Eliminates 100% of false positives by injecting high-entropy canary tokens into victim data and confirming exploits only when the attacker persona reflects the private canary.</p>
         </div>
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono font-bold text-[10px]">agent-03-jira</span>
-          <h4 class="font-bold text-white text-xs">Jira Telemetry Agent</h4>
-          <p class="text-slate-400">Queries Jira Cloud via bounded JQL search to inspect active sprint tickets, epics, and blocked dependency links.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px]">cegis-ast-repair</span>
+          <h4 class="font-bold text-white text-xs">CEGIS Dual-Pass AST Program Repair</h4>
+          <p class="text-slate-400">Synthesizes Python AST source code repairs with Gemini 3.7 Flash and validates them against a dual-pass oracle: Pass 1 asserts attacker 403/404, Pass 2 asserts victim 200.</p>
         </div>
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-mono font-bold text-[10px]">agent-04-workstream</span>
-          <h4 class="font-bold text-white text-xs">Workstream Context Agent</h4>
-          <p class="text-slate-400">Ingests public Slack discussions with PII sanitization, sentiment analysis, and blocker extraction.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-mono font-bold text-[10px]">capability-hypervisor</span>
+          <h4 class="font-bold text-white text-xs">Inline Capability Hypervisor</h4>
+          <p class="text-slate-400">Protects APIs from rogue agents and tools by enforcing scoped HMAC tokens, pre-state witnesses H(S), and monotonic single-use action permits.</p>
         </div>
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 font-mono font-bold text-[10px]">agent-05-synthesis</span>
-          <h4 class="font-bold text-white text-xs">Root Cause Synthesis Agent</h4>
-          <p class="text-slate-400">Correlates cross-tool signals using Gemini 3.7 Flash on Vertex AI with SHA-256 delta caching.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono font-bold text-[10px]">semantic-denial</span>
+          <h4 class="font-bold text-white text-xs">Structured Semantic Denial Envelopes</h4>
+          <p class="text-slate-400">Returns structured, machine-actionable recovery payloads upon violation, allowing AI agents to self-correct rather than crashing on generic 403 Forbidden errors.</p>
         </div>
-        <div class="glass-panel p-4 rounded-xl border border-obsidian-700 space-y-2">
-          <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono font-bold text-[10px]">agent-06-action</span>
-          <h4 class="font-bold text-white text-xs">Action Drafting Agent</h4>
-          <p class="text-slate-400">Generates contextual Slack unblocking cards strictly awaiting Human-in-the-Loop sign-off.</p>
+        <div class="glass-panel p-4 rounded-xl border border-slate-800 space-y-2">
+          <span class="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono font-bold text-[10px]">abac-perimeter</span>
+          <h4 class="font-bold text-white text-xs">Deterministic ABAC & Audit Engine</h4>
+          <p class="text-slate-400">Evaluates attribute-based access control policies with sub-millisecond latency, enforcing departmental clearances and recording immutable SQLite audit logs.</p>
         </div>
       </div>
     </div>
@@ -123,55 +95,58 @@
     <div class="space-y-4">
       <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center space-x-2">
         <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
-        <span>Security & Access Governance Reference</span>
+        <span>Security & Capability Evaluation Sandbox</span>
       </h2>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         <!-- ABAC SIMULATOR -->
-        <div class="glass-panel p-5 rounded-xl border border-obsidian-700 space-y-4">
+        <div class="glass-panel p-5 rounded-xl border border-slate-800 space-y-4">
           <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
             <i data-lucide="lock" class="w-3.5 h-3.5 text-blue-400"></i>
-            <span>ABAC Scope Perimeter Evaluation</span>
+            <span>ABAC Policy Simulator</span>
           </h3>
           <div class="space-y-3 text-xs">
             <div>
               <label class="block text-slate-400 font-medium mb-1">User Persona:</label>
               <select id="sim-user-persona" onchange="runABACSimulation()" class="w-full glass-input rounded-lg p-2 text-white text-xs font-mono">
-                <option value="lead">alex-lead (Scopes: engineering, platform, security)</option>
-                <option value="dev">dev1 (Scopes: engineering)</option>
-                <option value="sales">sales_rep (Scopes: sales, marketing)</option>
-                <option value="guest">guest_auditor (Unauthenticated / restricted)</option>
+                <option value="elena.lead">elena.lead (Clearance: L5, Dept: engineering, Squads: auth, platform, devops)</option>
+                <option value="david.kim">david.kim (Clearance: L4, Dept: engineering, Squads: auth)</option>
+                <option value="sarah.chen">sarah.chen (Clearance: L3, Dept: engineering, Squads: frontend)</option>
               </select>
             </div>
             <div>
               <label class="block text-slate-400 font-medium mb-1">Target Resource:</label>
               <select id="sim-resource-target" onchange="runABACSimulation()" class="w-full glass-input rounded-lg p-2 text-white text-xs font-mono">
-                <option value="pr402">PR-402: OAuth 2.1 (Required: engineering)</option>
-                <option value="sec_audit">SEC-99: Production IAM Keys (Required: security)</option>
-                <option value="sales_lead">DEAL-400: Q3 Pipeline (Required: sales)</option>
+                <option value="res-auth-vault-01">res-auth-vault-01 (Min Clearance: L4, Squad: auth)</option>
+                <option value="res-prod-db-01">res-prod-db-01 (Min Clearance: L5, Squad: platform)</option>
+                <option value="res-billing-api-01">res-billing-api-01 (Min Clearance: L3, Squad: billing)</option>
               </select>
             </div>
             <div id="sim-abac-result" class="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-emerald-300 font-mono text-xs">
-              ✓ ACCESS GRANTED: Scope intersection verified.
+              ✓ ACCESS GRANTED: Clearance L5 meets required L4; squad match confirmed.
             </div>
           </div>
         </div>
 
-        <!-- PROMPT DEFENSE & PII SANITIZER -->
-        <div class="glass-panel p-5 rounded-xl border border-obsidian-700 space-y-4">
+        <!-- CAPABILITY TOKEN INSPECTOR -->
+        <div class="glass-panel p-5 rounded-xl border border-slate-800 space-y-4">
           <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
-            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-cyan-400"></i>
-            <span>Model Armor & PII Sanitizer Sandbox</span>
+            <i data-lucide="key" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Capability Token & Witness Anatomy</span>
           </h3>
-          <div class="space-y-3 text-xs">
-            <div>
-              <label class="block text-slate-400 font-medium mb-1">Test Payload:</label>
-              <textarea id="guardrail-test-input" rows="3" class="w-full glass-input rounded-lg p-2 text-white text-xs font-mono">Contact alex at alex.lead@company.com with token ghp_123456789012345678901234567890123456</textarea>
+          <div class="space-y-2 text-xs font-mono text-slate-300">
+            <div class="p-2.5 rounded-lg bg-[#0d121d] border border-slate-800">
+              <span class="text-blue-400 font-bold block mb-1">// Capability Token Structure</span>
+              <span>cap_v1:eyJ0ZW5hbnRfaWQiOiJ0ZW5hbnQtYSIsInNjb3BlcyI6WyJyZWFkIiwid3JpdGUiXX0...</span>
             </div>
-            <button onclick="runGuardrailTest()" class="w-full py-2 bg-obsidian-800 hover:bg-obsidian-700 border border-obsidian-700 text-white text-xs font-semibold rounded-lg transition">
-              Sanitize Payload
-            </button>
-            <div id="guardrail-test-output" class="p-3 rounded-lg bg-obsidian-850 border border-obsidian-700 text-cyan-300 font-mono text-xs whitespace-pre-wrap">Contact alex at [REDACTED_EMAIL] with token [REDACTED_GITHUB_TOKEN]</div>
+            <div class="p-2.5 rounded-lg bg-[#0d121d] border border-slate-800">
+              <span class="text-emerald-400 font-bold block mb-1">// Pre-State Witness H(S)</span>
+              <span>H(S) = SHA256(canonical_json(resource_payload))</span>
+            </div>
+            <div class="p-2.5 rounded-lg bg-[#0d121d] border border-slate-800">
+              <span class="text-amber-400 font-bold block mb-1">// Monotonic Action Permit</span>
+              <span>permit_v1:nonce_3f8a9c2b:timestamp_1729328400:hmac_sig</span>
+            </div>
           </div>
         </div>
 
@@ -180,8 +155,8 @@
 
   </main>
 
-  <footer class="mt-auto border-t border-obsidian-700 bg-obsidian-950/80 py-4 text-center text-xs text-slate-500">
-    Prometheus Enterprise Platform • Built on Google Cloud & Vertex AI Agent Engine
+  <footer class="mt-auto border-t border-slate-800 bg-[#0d121d]/80 py-4 text-center text-xs text-slate-500">
+    Prometheus Enterprise • Autonomous API Security & Runtime Capability Hypervisor
   </footer>
 
   <script>
@@ -190,20 +165,30 @@
       const persona = document.getElementById('sim-user-persona').value;
       const target = document.getElementById('sim-resource-target').value;
       const resultBox = document.getElementById('sim-abac-result');
-      const perms = { lead: ['pr402', 'sec_audit'], dev: ['pr402'], sales: ['sales_lead'], guest: [] };
-      if (perms[persona].includes(target)) {
+      
+      const clearances = { 'elena.lead': 5, 'david.kim': 4, 'sarah.chen': 3 };
+      const squads = {
+        'elena.lead': ['auth', 'platform', 'devops'],
+        'david.kim': ['auth'],
+        'sarah.chen': ['frontend']
+      };
+      const resRequirements = {
+        'res-auth-vault-01': { minClearance: 4, squad: 'auth' },
+        'res-prod-db-01': { minClearance: 5, squad: 'platform' },
+        'res-billing-api-01': { minClearance: 3, squad: 'billing' }
+      };
+
+      const req = resRequirements[target];
+      const userClearance = clearances[persona];
+      const userSquads = squads[persona];
+
+      if (userClearance >= req.minClearance && userSquads.includes(req.squad)) {
         resultBox.className = 'p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-emerald-300 font-mono text-xs';
-        resultBox.innerHTML = `✓ ACCESS GRANTED: Scope intersection verified for ${target}.`;
+        resultBox.innerHTML = `✓ ACCESS GRANTED: Clearance L${userClearance} meets required L${req.minClearance}; squad '${req.squad}' matched.`;
       } else {
         resultBox.className = 'p-3 rounded-lg bg-red-950/20 border border-red-500/20 text-red-300 font-mono text-xs';
-        resultBox.innerHTML = `⛔ ACCESS DENIED: Scope mismatch for ${target}.`;
+        resultBox.innerHTML = `⛔ ACCESS DENIED: Insufficient clearance or squad mismatch for ${target}.`;
       }
-    }
-    function runGuardrailTest() {
-      const input = document.getElementById('guardrail-test-input').value;
-      let sanitized = input.replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, '[REDACTED_EMAIL]');
-      sanitized = sanitized.replace(/ghp_[a-zA-Z0-9]{36}/g, '[REDACTED_GITHUB_TOKEN]');
-      document.getElementById('guardrail-test-output').innerText = sanitized;
     }
   </script>
 </body>

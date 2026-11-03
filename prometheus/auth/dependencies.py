@@ -21,15 +21,49 @@ class UserContext(BaseModel):
     roles: List[str] = Field(default_factory=list)
     org_scopes: List[str] = Field(default_factory=list)
     is_authenticated: bool = False
+    auth_method: str = 'none'
+    api_key_id: Optional[str] = None
 
 
 async def get_current_user_optional(
     request: Request,
     auth_header: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer)
 ) -> UserContext:
+    # 1. Check for Multi-Tenant SaaS API Key (X-API-Key header or Bearer prom_live_...)
+    raw_api_key = request.headers.get('X-API-Key') or request.headers.get('x-api-key')
     token = None
     if auth_header:
-        token = auth_header.credentials
+        if auth_header.credentials.startswith('prom_live_'):
+            raw_api_key = auth_header.credentials
+        else:
+            token = auth_header.credentials
+
+    if raw_api_key:
+        from prometheus.saas.engine import saas_engine
+        key_record = saas_engine.authenticate_api_key(raw_api_key)
+        if not key_record:
+            raise HTTPException(
+                status_code=401,
+                detail='Invalid, expired, or revoked Prometheus API Key (prom_live_...).'
+            )
+        allowed, _ = saas_engine.check_rate_limit(key_record.tenant_id)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded for tenant '{key_record.tenant_id}'. Upgrade subscription tier for higher throughput."
+            )
+        return UserContext(
+            user_id=f"apikey:{key_record.key_id}",
+            email=f"apikey@{key_record.tenant_id}.enterprise.io",
+            name=f"API Key ({key_record.name})",
+            tenant_id=key_record.tenant_id,
+            roles=key_record.roles,
+            org_scopes=key_record.scopes,
+            is_authenticated=True,
+            auth_method='api_key',
+            api_key_id=key_record.key_id,
+        )
+
     if not token:
         token = request.cookies.get('session_token')
 
@@ -48,6 +82,7 @@ async def get_current_user_optional(
                     roles=user_profile.roles,
                     org_scopes=user_profile.org_scopes,
                     is_authenticated=True,
+                    auth_method='session',
                 )
             return UserContext(
                 user_id=user_id,
@@ -56,6 +91,7 @@ async def get_current_user_optional(
                 roles=payload.get('roles', ['operator']),
                 org_scopes=payload.get('scopes', ['engineering', 'platform']),
                 is_authenticated=True,
+                auth_method='session',
             )
 
     return UserContext()

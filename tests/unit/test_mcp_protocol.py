@@ -13,7 +13,6 @@ from prometheus.mcp.protocol import (
     MCPListToolsResponse,
 )
 from prometheus.mcp.server import PrometheusMCPServer
-from prometheus.memory.state_store import state_store, ActionDraftRecord, DraftStatus
 
 
 @pytest.fixture
@@ -28,13 +27,13 @@ class TestMCPProtocol:
         req = JSONRPCRequest(
             id="req-123",
             method="tools/call",
-            params={"name": "list_active_blockers", "arguments": {}},
+            params={"name": "scan_api_security", "arguments": {"target_url": "http://test"}},
         )
         data = req.model_dump()
         assert data["jsonrpc"] == "2.0"
         assert data["id"] == "req-123"
         assert data["method"] == "tools/call"
-        assert data["params"]["name"] == "list_active_blockers"
+        assert data["params"]["name"] == "scan_api_security"
 
     def test_jsonrpc_response_schema_serialization(self):
         """Validates JSON-RPC 2.0 Response with result or error."""
@@ -48,8 +47,8 @@ class TestMCPProtocol:
     def test_tool_definition_and_list_response_schema(self):
         """Validates MCP Tool definitions and schema models."""
         param = MCPToolParameter(
-            properties={"draft_id": {"type": "string"}},
-            required=["draft_id"],
+            properties={"target_url": {"type": "string"}},
+            required=["target_url"],
         )
         tool = MCPToolDefinition(
             name="test_tool",
@@ -59,7 +58,7 @@ class TestMCPProtocol:
         list_resp = MCPListToolsResponse(tools=[tool])
         assert len(list_resp.tools) == 1
         assert list_resp.tools[0].name == "test_tool"
-        assert "draft_id" in list_resp.tools[0].inputSchema.properties
+        assert "target_url" in list_resp.tools[0].inputSchema.properties
 
     @pytest.mark.asyncio
     async def test_mcp_initialize_method(self, mcp_server):
@@ -75,7 +74,7 @@ class TestMCPProtocol:
         assert "tools" in result["capabilities"]
 
     @pytest.mark.asyncio
-    async def test_mcp_tools_list_contains_all_fleet_tools(self, mcp_server):
+    async def test_mcp_tools_list_contains_all_security_tools(self, mcp_server):
         """Validates MCP tools/list exposes all required tools."""
         payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
         resp = await mcp_server.handle_jsonrpc(payload)
@@ -83,11 +82,10 @@ class TestMCPProtocol:
         tools = resp["result"]["tools"]
         tool_names = [t["name"] for t in tools]
         expected_tools = [
-            "get_daily_digest",
-            "list_active_blockers",
-            "list_pending_actions",
-            "approve_action",
-            "reject_action",
+            "scan_api_security",
+            "mint_capability_token",
+            "request_action_permit",
+            "verify_action_permit",
         ]
         for expected in expected_tools:
             assert expected in tool_names
@@ -102,77 +100,52 @@ class TestMCPProtocol:
         assert "Method 'unsupported_mcp_call' not found" in resp["error"]["message"]
 
     @pytest.mark.asyncio
-    async def test_mcp_call_tool_list_active_blockers(self, mcp_server):
-        """Validates MCP tools/call for list_active_blockers."""
+    async def test_mcp_call_tool_mint_capability_token(self, mcp_server):
+        """Validates MCP tools/call for mint_capability_token."""
         payload = {
             "jsonrpc": "2.0",
             "id": 10,
             "method": "tools/call",
-            "params": {"name": "list_active_blockers", "arguments": {}},
+            "params": {
+                "name": "mint_capability_token",
+                "arguments": {"subject": "agent-worker", "ttl_seconds": 60},
+            },
         }
         resp = await mcp_server.handle_jsonrpc(payload)
         assert "result" in resp
         assert "content" in resp["result"]
         assert len(resp["result"]["content"]) > 0
         assert resp["result"]["content"][0]["type"] == "text"
+        token_data = json.loads(resp["result"]["content"][0]["text"])
+        assert token_data["subject"] == "agent-worker"
 
     @pytest.mark.asyncio
-    async def test_mcp_call_tool_list_pending_actions(self, mcp_server):
-        """Validates MCP tools/call for list_pending_actions."""
-        await state_store.init_db()
+    async def test_mcp_call_tool_request_action_permit(self, mcp_server):
+        """Validates MCP tools/call for request_action_permit."""
+        token = mcp_server.hypervisor.token_authority.mint_token(
+            subject="agent-worker",
+            allowed_methods=["tools/call", "PUT", "request_action_permit"],
+            allowed_resource_ids=["*"],
+            ttl_seconds=60,
+        )
         payload = {
             "jsonrpc": "2.0",
             "id": 11,
             "method": "tools/call",
-            "params": {"name": "list_pending_actions", "arguments": {}},
+            "params": {
+                "name": "request_action_permit",
+                "arguments": {
+                    "capability_token": token.model_dump(),
+                    "target_op": "PUT",
+                    "resource_id": "res-invoice-123",
+                },
+            },
         }
         resp = await mcp_server.handle_jsonrpc(payload)
         assert "result" in resp
         assert "content" in resp["result"]
-        assert resp["result"]["content"][0]["type"] == "text"
-
-    @pytest.mark.asyncio
-    async def test_mcp_call_tool_approve_and_reject_action(self, mcp_server):
-        """Validates MCP tools/call for approve_action and reject_action."""
-        await state_store.init_db()
-        # Save a test draft
-        draft = ActionDraftRecord(
-            draft_id="DRAFT-MCP-UNIT-TEST",
-            target_channel_or_user="#platform-engineering",
-            action_type="slack_channel_alert",
-            content="MCP approval test",
-            status=DraftStatus.PENDING,
-        )
-        await state_store.save_draft(draft)
-
-        # Approve via MCP
-        app_payload = {
-            "jsonrpc": "2.0",
-            "id": 12,
-            "method": "tools/call",
-            "params": {
-                "name": "approve_action",
-                "arguments": {"draft_id": "DRAFT-MCP-UNIT-TEST", "approver": "mcp-tester"},
-            },
-        }
-        resp_app = await mcp_server.handle_jsonrpc(app_payload)
-        assert "result" in resp_app
-        content_text = json.loads(resp_app["result"]["content"][0]["text"])
-        assert content_text["status"] == "success"
-
-        # Nonexistent draft error handling
-        rej_err_payload = {
-            "jsonrpc": "2.0",
-            "id": 13,
-            "method": "tools/call",
-            "params": {
-                "name": "reject_action",
-                "arguments": {"draft_id": "NONEXISTENT-DRAFT", "approver": "mcp-tester"},
-            },
-        }
-        resp_rej_err = await mcp_server.handle_jsonrpc(rej_err_payload)
-        assert "error" in resp_rej_err
-        assert resp_rej_err["error"]["code"] == -32603
+        permit_data = json.loads(resp["result"]["content"][0]["text"])
+        assert permit_data["action_method"] == "PUT"
 
     @pytest.mark.asyncio
     async def test_mcp_call_unregistered_tool(self, mcp_server):
