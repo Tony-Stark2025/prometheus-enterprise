@@ -16,6 +16,7 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 import json
+import re
 import time
 import asyncio
 from contextlib import asynccontextmanager
