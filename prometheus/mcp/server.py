@@ -150,6 +150,21 @@ class PrometheusMCPServer:
                 required=["http_method", "target_url"],
             ),
         ),
+        MCPToolDefinition(
+            name="prometheus_publish_pr",
+            description="Publishes a verified ContextualPatchPR directly to GitHub by creating a remediation branch, committing patched files, and opening a Pull Request.",
+            inputSchema=MCPToolParameter(
+                properties={
+                    "repo": {"type": "string", "description": "Target GitHub repository in 'owner/repo' format"},
+                    "pr_title": {"type": "string", "description": "Pull Request title"},
+                    "pr_body_markdown": {"type": "string", "description": "Pull Request markdown body"},
+                    "patched_files": {"type": "object", "description": "Map of relative file path to patched file content"},
+                    "base_branch": {"type": "string", "description": "Base branch name (default: 'main')"},
+                    "branch_name": {"type": "string", "description": "Optional custom remediation branch name"},
+                },
+                required=["repo", "pr_title", "pr_body_markdown", "patched_files"],
+            ),
+        ),
     ]
 
     def __init__(
@@ -464,6 +479,26 @@ class PrometheusMCPServer:
                     }
                 ]
             }
+
+        elif tool_name == "prometheus_publish_pr":
+            from prometheus.pentest.pr_reporter import PRReporter
+
+            repo = str(args.get("repo", "")).strip()
+            pr_title = str(args.get("pr_title", "fix(security): Prometheus automated remediation")).strip()
+            pr_body_markdown = str(args.get("pr_body_markdown", "")).strip()
+            patched_files = args.get("patched_files") if isinstance(args.get("patched_files"), dict) else {}
+            base_branch = str(args.get("base_branch", "main")).strip()
+            branch_name = args.get("branch_name")
+
+            pub_res = await PRReporter.publish_github_pull_request(
+                repo=repo,
+                pr_title=pr_title,
+                pr_body_markdown=pr_body_markdown,
+                patched_files=patched_files,
+                base_branch=base_branch,
+                branch_name=branch_name,
+            )
+            return {"content": [{"type": "text", "text": json.dumps(pub_res, default=str)}]}
 
         else:
             raise ValueError(f"Unknown MCP tool: {tool_name}")

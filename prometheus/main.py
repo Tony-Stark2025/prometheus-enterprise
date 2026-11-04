@@ -929,6 +929,29 @@ async def github_webhook_receiver(
             "patches_count": scan_res.patches_count,
             "cumulative_diff": scan_res.cumulative_diff,
         }
+        repo_full_name = (
+            payload.get("repo")
+            or (payload.get("repository") or {}).get("full_name")
+            or ((pr_obj.get("base") or {}).get("repo") or {}).get("full_name")
+        )
+        auto_publish = bool(payload.get("auto_publish_pr", False) or os.getenv("GITHUB_TOKEN"))
+        if repo_full_name and auto_publish and scan_res.patched_files:
+            from prometheus.pentest.pr_reporter import PRReporter
+            first_pr = scan_res.contextual_prs[0] if scan_res.contextual_prs else {}
+            pr_title = first_pr.get(
+                "pr_title",
+                f"fix(security): Prometheus automated remediation ({scan_res.exploits_count} exploits fixed)",
+            )
+            pr_body = first_pr.get("pr_body_markdown", f"```diff\n{scan_res.cumulative_diff}\n```")
+            base_branch = ((pr_obj.get("head") or {}).get("ref")) or "main"
+            pr_pub_res = await PRReporter.publish_github_pull_request(
+                repo=str(repo_full_name),
+                pr_title=pr_title,
+                pr_body_markdown=pr_body,
+                patched_files=scan_res.patched_files,
+                base_branch=base_branch,
+            )
+            scan_summary["auto_remediation_pr"] = pr_pub_res
 
     resp_payload: Dict[str, Any] = {
         "status": "scanned" if scan_summary else "received",
@@ -942,6 +965,8 @@ async def github_webhook_receiver(
 
 class ImmunologyScanRequest(BaseModel):
     target_dir: str = Field(default=".", description="Target repository directory for dependency & reachability analysis")
+    auto_publish_pr: bool = Field(default=False, description="Automatically open a GitHub PR for reachable CVEs")
+    repo: Optional[str] = Field(default=None, description="Target GitHub repository ('owner/repo') when auto_publish_pr=True")
 
 
 class SWEPatchRequest(BaseModel):
@@ -957,13 +982,18 @@ async def execute_immunology_scan(req: ImmunologyScanRequest):
     """
     Prometheus v2.5 Event-Driven Continuous Immunology Endpoint.
     Ingests live advisories from The Hacker News (THN) RSS and OSV.dev APIs,
-    extracts repository dependencies, and verifies source-code reachability.
+    extracts repository dependencies, verifies source-code reachability,
+    synthesizes manifest upgrade diffs, and optionally publishes a GitHub PR.
     """
     from prometheus.pentest.immunology import ContinuousImmunologyEngine
 
     target_dir = req.target_dir if os.path.isdir(req.target_dir) else os.getcwd()
     engine = ContinuousImmunologyEngine()
-    return await engine.run_immunology_sweep(target_dir)
+    return await engine.run_immunology_sweep(
+        target_dir=target_dir,
+        auto_publish_pr=req.auto_publish_pr,
+        repo=req.repo,
+    )
 
 
 @app.post("/api/v1/pentest/swe-patch")

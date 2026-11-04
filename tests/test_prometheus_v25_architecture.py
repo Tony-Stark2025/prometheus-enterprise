@@ -455,3 +455,75 @@ async def test_github_pull_request_publisher_flow_and_validation():
         assert state["commits"]["app/api/invoices.py"]["sha"] == "existing-file-sha-001"
 
 
+@pytest.mark.asyncio
+async def test_immunology_dependency_upgrade_patch_and_mcp_publish_pr(tmp_path):
+    """
+    Verifies ContinuousImmunologyEngine.synthesize_dependency_upgrade_patch across
+    package.json and requirements.txt, MCP prometheus_publish_pr tool execution,
+    and the v2.5 Web Dashboard immunology & SWE repair UI tab.
+    """
+    pkg_json = tmp_path / "package.json"
+    pkg_json.write_text(
+        json.dumps(
+            {
+                "name": "enterprise-outreach",
+                "version": "1.0.0",
+                "dependencies": {"nodemailer": "^6.9.1", "express": "^4.19.2"},
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    patch_plan = ContinuousImmunologyEngine.synthesize_dependency_upgrade_patch(
+        target_dir=str(tmp_path),
+        package_name="nodemailer",
+        current_version="6.9.1",
+        fixed_version="6.9.16",
+        manifest_file="package-lock.json",
+        advisory_id="CVE-2026-1099",
+        call_sites=["server/services/emailService.ts -> nodemailer.createTransport()"],
+    )
+    assert patch_plan["manifest_file"] == "package.json"
+    assert patch_plan["target_version"] == "6.9.16"
+    assert patch_plan["manifest_syntax_valid"] is True
+    assert "+    \"nodemailer\": \"^6.9.16\"" in patch_plan["git_diff"]
+    assert "package.json" in patch_plan["patched_files"]
+
+    # Verify MCP prometheus_publish_pr tool is listed and callable
+    mcp_srv = PrometheusMCPServer()
+    list_resp = await mcp_srv.handle_jsonrpc({"jsonrpc": "2.0", "id": 91, "method": "tools/list", "params": {}})
+    tool_names = [t["name"] for t in list_resp["result"]["tools"]]
+    assert "prometheus_publish_pr" in tool_names
+
+    pub_resp = await mcp_srv.handle_jsonrpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 92,
+            "method": "tools/call",
+            "params": {
+                "name": "prometheus_publish_pr",
+                "arguments": {
+                    "repo": "acme/enterprise-outreach",
+                    "pr_title": patch_plan["pr_title"],
+                    "pr_body_markdown": patch_plan["pr_body_markdown"],
+                    "patched_files": patch_plan["patched_files"],
+                },
+            },
+        }
+    )
+    pub_data = json.loads(pub_resp["result"]["content"][0]["text"])
+    assert pub_data["status"] in ("MISSING_CREDENTIALS", "PR_OPENED", "BASE_BRANCH_NOT_FOUND")
+
+    # Verify /dashboard includes the v2.5 Continuous Immunology, SWE Repair & OOB Oracle section
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        dash_resp = await client.get("/dashboard")
+        assert dash_resp.status_code == 200
+        assert "section-immunology" in dash_resp.text
+        assert "runImmunologySweepUI" in dash_resp.text
+        assert "publishContextualPRUI" in dash_resp.text
+        assert "mintOOBCanaryUI" in dash_resp.text
+
+
+

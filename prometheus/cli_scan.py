@@ -72,6 +72,7 @@ async def run_scan(
     sensitive_markers: Optional[List[str]] = None,
     alpha_tenant_id: str = "org-alpha-victim-001",
     beta_tenant_id: str = "org-beta-attacker-002",
+    publish_pr_repo: Optional[str] = None,
 ) -> int:
     try:
         async with asyncio.timeout(80.0):
@@ -94,6 +95,7 @@ async def run_scan(
                 sensitive_markers=sensitive_markers,
                 alpha_tenant_id=alpha_tenant_id,
                 beta_tenant_id=beta_tenant_id,
+                publish_pr_repo=publish_pr_repo,
             )
     except TimeoutError:
         print("\n[-] CI/CD SLA Violation: Scan exceeded 80.0s global timeout threshold.")
@@ -119,6 +121,7 @@ async def _run_scan_internal(
     sensitive_markers: Optional[List[str]] = None,
     alpha_tenant_id: str = "org-alpha-victim-001",
     beta_tenant_id: str = "org-beta-attacker-002",
+    publish_pr_repo: Optional[str] = None,
 ) -> int:
     start_total_time = time.perf_counter()
 
@@ -358,6 +361,26 @@ async def _run_scan_internal(
 
     await prober.aclose()
 
+    if publish_pr_repo and patched_files:
+        contextual_prs = engine_results.get("contextual_prs", [])
+        first_pr = contextual_prs[0] if contextual_prs else {}
+        pr_title = first_pr.get(
+            "pr_title",
+            f"fix(security): Prometheus automated remediation ({len(confirmed_exploits)} exploits fixed)",
+        )
+        pr_body = first_pr.get("pr_body_markdown", f"```diff\n{cumulative_diff}\n```")
+        print(f"\n[*] Publishing Contextual Remediation Pull Request to GitHub ({publish_pr_repo})...")
+        pub_res = await PRReporter.publish_github_pull_request(
+            repo=publish_pr_repo,
+            pr_title=pr_title,
+            pr_body_markdown=pr_body,
+            patched_files=patched_files,
+        )
+        if pub_res.get("published"):
+            print(f"[+] GitHub Pull Request Opened: {pub_res.get('pr_url')} (Branch: {pub_res.get('branch')})")
+        else:
+            print(f"[!] GitHub PR Publish Status: {pub_res.get('status')} ({pub_res.get('error')})")
+
     if confirmed_exploits and fail_on_exploit:
         print(f"\n[-] Failing CI/CD Gate: {len(confirmed_exploits)} critical vulnerability(ies) detected.")
         return 1
@@ -425,6 +448,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-dir", type=str, help="Local codebase directory for static route & AST source file discovery and patching")
     parser.add_argument("--apply-patch", action="store_true", help="Apply certified AST patches directly to files in --target-dir")
     parser.add_argument("--demo", action="store_true", help="Run self-contained end-to-end benchmark demo with in-memory ASGI")
+    parser.add_argument("--immunology", action="store_true", help="Run Event-Driven Continuous Immunology sweep (OSV.dev + THN RSS + AST call-graph reachability)")
+    parser.add_argument("--publish-pr", type=str, help="Target GitHub repository ('owner/repo') to automatically open a remediation Pull Request")
     parser.add_argument("--fail-on-exploit", action="store_true", help="Exit code 1 if exploits are verified (CI/CD PR gate)")
     parser.add_argument("--output-diff", type=str, help="File to write verified unified git diff patch")
     parser.add_argument("--output-markdown", type=str, help="File to write GitHub PR Markdown review comment")
@@ -445,6 +470,32 @@ def main() -> None:
 
     start_wall_clock = time.perf_counter()
     max_sla_seconds = args.sla_budget_s or args.max_time or 85.0
+
+    if args.immunology:
+        from prometheus.pentest.immunology import ContinuousImmunologyEngine
+
+        scan_dir = args.target_dir or os.getcwd()
+        print(f"[*] Running Event-Driven Continuous Immunology Sweep on: {os.path.abspath(scan_dir)}...")
+        engine = ContinuousImmunologyEngine()
+        res = asyncio.run(
+            engine.run_immunology_sweep(
+                target_dir=scan_dir,
+                auto_publish_pr=bool(args.publish_pr),
+                repo=args.publish_pr,
+            )
+        )
+        print(f"[+] Dependencies Scanned:          {res['dependencies_scanned']}")
+        print(f"[+] THN Live Advisories Ingested:  {res['thn_live_events_ingested']}")
+        print(f"[+] OSV Advisories Matched:        {res['osv_advisories_matched']}")
+        print(f"[+] Reachable Vulnerabilities:     {res['reachable_vulnerabilities_count']}")
+        print(f"[+] Unreachable Noise Suppressed:  {res['suppressed_unreachable_noise_count']}")
+        for plan in res.get("remediation_plans", []):
+            print(f"\n  [!] REACHABLE CVE: {plan['advisory_id']} in {plan['package_name']}@{plan['current_version']}")
+            print(f"      Action: {plan['recommended_action']}")
+            if plan.get("github_pr_result"):
+                pr_info = plan["github_pr_result"]
+                print(f"      GitHub PR Status: {pr_info.get('status')} {pr_info.get('pr_url', '')}")
+        sys.exit(1 if (res["reachable_vulnerabilities_count"] > 0 and args.fail_on_exploit) else 0)
 
     seed_params: Dict[str, str] = {}
     sensitive_markers: List[str] = []
@@ -565,6 +616,7 @@ def main() -> None:
                         sensitive_markers=sensitive_markers,
                         alpha_tenant_id=alpha_tenant_id,
                         beta_tenant_id=beta_tenant_id,
+                        publish_pr_repo=args.publish_pr,
                     ),
                     timeout=max_sla_seconds,
                 )
@@ -575,7 +627,7 @@ def main() -> None:
         sys.exit(exit_code)
 
     if not args.spec and not args.spec_url and not args.target_dir:
-        print("[-] Error: You must provide --spec <file>, --spec-url <url>, --target-dir <dir>, or --demo.")
+        print("[-] Error: You must provide --spec <file>, --spec-url <url>, --target-dir <dir>, --immunology, or --demo.")
         sys.exit(2)
 
     # Launch preview app first if --app-cmd provided so relative --spec-url (/openapi.json) can be fetched from it
@@ -678,6 +730,7 @@ def main() -> None:
                     sensitive_markers=sensitive_markers,
                     alpha_tenant_id=alpha_tenant_id,
                     beta_tenant_id=beta_tenant_id,
+                    publish_pr_repo=args.publish_pr,
                 ),
                 timeout=remaining_budget,
             )

@@ -182,6 +182,10 @@
         <i data-lucide="shield-check" class="w-4 h-4"></i>
         <span>API Security & Pentest Gate</span>
       </button>
+      <button onclick="switchTab('immunology')" id="tab-immunology" class="py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-2 transition whitespace-nowrap">
+        <i data-lucide="radar" class="w-4 h-4"></i>
+        <span>Continuous Immunology, SWE Repair &amp; OOB Oracle</span>
+      </button>
       <button onclick="switchTab('hypervisor')" id="tab-hypervisor" class="py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-2 transition whitespace-nowrap">
         <i data-lucide="cpu" class="w-4 h-4"></i>
         <span>Capability Hypervisor & Firewall</span>
@@ -932,6 +936,102 @@
       </div>
     </section>
 
+    <!-- ======================================================================= -->
+    <!-- TAB: CONTINUOUS IMMUNOLOGY, CONTEXTUAL SWE REPAIR & OOB ORACLE (v2.5)   -->
+    <!-- ======================================================================= -->
+    <section id="section-immunology" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- 1. CONTINUOUS IMMUNOLOGY PANEL -->
+        <div class="bg-[#121722] p-5 rounded-2xl border border-[#1c2333] space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-[#1c2333]">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+              <i data-lucide="radar" class="w-4 h-4 text-cyan-400"></i>
+              <span>Event-Driven Continuous Immunology</span>
+            </h3>
+            <span class="px-2 py-0.5 text-[10px] font-mono bg-cyan-950/50 text-cyan-400 border border-cyan-500/30 rounded">THN + OSV.dev + AST</span>
+          </div>
+          <p class="text-xs text-slate-400">Ingests live advisories from The Hacker News RSS &amp; OSV.dev, parses repository lockfiles, and traces AST call-graph reachability.</p>
+          <div class="space-y-2">
+            <label class="text-[11px] font-semibold text-slate-300 block">Target Repository Path</label>
+            <input type="text" id="imm-target-dir" value="." class="w-full px-3 py-2 rounded-lg glass-input text-xs font-mono">
+          </div>
+          <button id="btn-run-immunology" onclick="runImmunologySweepUI()" class="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl text-xs transition flex items-center justify-center space-x-2">
+            <i data-lucide="activity" class="w-4 h-4"></i>
+            <span>Execute Continuous Immunology Sweep</span>
+          </button>
+          <pre id="imm-result-box" class="p-3 rounded-xl bg-[#07090e] border border-[#1c2333] text-[11px] font-mono text-slate-300 max-h-72 overflow-y-auto">Click "Execute Continuous Immunology Sweep" to query live OSV.dev &amp; THN feeds and trace AST reachability.</pre>
+        </div>
+
+        <!-- 2. CONTEXTUAL SWE REPAIR & GITHUB PR PUBLISHER -->
+        <div class="bg-[#121722] p-5 rounded-2xl border border-[#1c2333] space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-[#1c2333]">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+              <i data-lucide="git-pull-request" class="w-4 h-4 text-emerald-400"></i>
+              <span>Contextual SWE Repair &amp; PR Publisher</span>
+            </h3>
+            <span class="px-2 py-0.5 text-[10px] font-mono bg-emerald-950/50 text-emerald-400 border border-emerald-500/30 rounded">Compiler Verified</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-300 block">Target Source File</label>
+              <input type="text" id="swe-target-file" value="app/api/invoices.py" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs font-mono">
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-slate-300 block">Vulnerable Endpoint</label>
+              <input type="text" id="swe-target-endpoint" value="/api/v1/invoices/{invoice_id}" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs font-mono">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-[11px] font-semibold text-slate-300 block">Vector</label>
+              <select id="swe-vector" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs font-mono">
+                <option value="BOLA_IDOR">BOLA / IDOR</option>
+                <option value="BFLA">BFLA (RBAC Escalation)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-slate-300 block">GitHub Repo (owner/repo)</label>
+              <input type="text" id="swe-github-repo" value="Tony-Stark2025/prometheus-enterprise" class="w-full px-2.5 py-1.5 rounded-lg glass-input text-xs font-mono">
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="synthesizeContextualPatchUI()" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-xs transition">
+              1. Synthesize &amp; Verify Patch
+            </button>
+            <button onclick="publishContextualPRUI()" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs transition">
+              2. Publish GitHub PR
+            </button>
+          </div>
+          <pre id="swe-result-box" class="p-3 rounded-xl bg-[#07090e] border border-[#1c2333] text-[11px] font-mono text-slate-300 max-h-72 overflow-y-auto">Synthesize a contextual patch to inspect native compiler verification and publish a GitHub Pull Request.</pre>
+        </div>
+
+        <!-- 3. EPHEMERAL OUT-OF-BAND (OOB) CANARY ORACLE -->
+        <div class="bg-[#121722] p-5 rounded-2xl border border-[#1c2333] space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-[#1c2333]">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center space-x-2">
+              <i data-lucide="radio" class="w-4 h-4 text-amber-400"></i>
+              <span>Out-of-Band (OOB) Canary Oracle</span>
+            </h3>
+            <span class="px-2 py-0.5 text-[10px] font-mono bg-amber-950/50 text-amber-400 border border-amber-500/30 rounded">Tier-1 Proof</span>
+          </div>
+          <p class="text-xs text-slate-400">Mints ephemeral OOB callback listeners for deterministic Blind SSRF, XXE, and asynchronous webhook verification.</p>
+          <div class="space-y-2">
+            <label class="text-[11px] font-semibold text-slate-300 block">Target Webhook / SSRF Route</label>
+            <input type="text" id="oob-target-endpoint" value="/api/v1/webhooks/preview" class="w-full px-3 py-2 rounded-lg glass-input text-xs font-mono">
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="mintOOBCanaryUI()" class="flex-1 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition">
+              Mint OOB Canary
+            </button>
+            <button onclick="checkOOBCanaryStatusUI()" class="flex-1 py-2 bg-[#1c2333] hover:bg-[#263044] text-slate-200 font-semibold rounded-xl text-xs transition">
+              Check Callback Status
+            </button>
+          </div>
+          <pre id="oob-result-box" class="p-3 rounded-xl bg-[#07090e] border border-[#1c2333] text-[11px] font-mono text-slate-300 max-h-72 overflow-y-auto">Click "Mint OOB Canary" to allocate an ephemeral Tier-1 verification listener.</pre>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- JAVASCRIPT CONTROLLER -->
@@ -1180,7 +1280,7 @@
     }
 
     function switchTab(tabId) {
-      ['overview', 'hypervisor', 'agentic', 'saas', 'security', 'settings'].forEach(t => {
+      ['overview', 'immunology', 'hypervisor', 'agentic', 'saas', 'security', 'settings'].forEach(t => {
         const sec = document.getElementById(`section-${t}`);
         const btn = document.getElementById(`tab-${t}`);
         if (sec) sec.classList.toggle('hidden', t !== tabId);
@@ -1194,6 +1294,120 @@
       });
       appState.activeTab = tabId;
       lucide.createIcons();
+    }
+
+    let lastSynthesizedPR = null;
+    let lastMintedCanaryId = null;
+
+    async function runImmunologySweepUI() {
+      const targetDir = document.getElementById('imm-target-dir').value.trim() || '.';
+      const box = document.getElementById('imm-result-box');
+      box.textContent = 'Running Continuous Immunology sweep (THN RSS + OSV.dev + Lockfile & AST Call-Graph)...';
+      try {
+        const res = await fetch('/api/v1/immunology/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_dir: targetDir })
+        });
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        showToast(`✓ Immunology Sweep: ${data.dependencies_scanned || 0} deps, ${data.reachable_vulnerabilities_count || 0} reachable CVEs`);
+      } catch (err) {
+        box.textContent = `Error: ${err.message}`;
+        showToast('Immunology sweep failed', 'error');
+      }
+    }
+
+    async function synthesizeContextualPatchUI() {
+      const targetFile = document.getElementById('swe-target-file').value.trim();
+      const targetEndpoint = document.getElementById('swe-target-endpoint').value.trim();
+      const vector = document.getElementById('swe-vector').value;
+      const box = document.getElementById('swe-result-box');
+      box.textContent = 'Synthesizing Contextual SWE Patch & running native compiler verification...';
+      try {
+        const res = await fetch('/api/v1/pentest/swe-patch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            target_file: targetFile,
+            target_endpoint: targetEndpoint,
+            http_method: 'GET',
+            vector: vector
+          })
+        });
+        const data = await res.json();
+        lastSynthesizedPR = data;
+        box.textContent = JSON.stringify(data, null, 2);
+        const clean = data.contextual_pr?.compilation_status?.clean_exit;
+        showToast(clean ? '✓ Patch synthesized & compiler verified!' : 'Patch synthesized (review compiler output)');
+      } catch (err) {
+        box.textContent = `Error: ${err.message}`;
+        showToast('SWE patch synthesis failed', 'error');
+      }
+    }
+
+    async function publishContextualPRUI() {
+      if (!lastSynthesizedPR || !lastSynthesizedPR.contextual_pr) {
+        await synthesizeContextualPatchUI();
+      }
+      const repo = document.getElementById('swe-github-repo').value.trim();
+      const targetFile = document.getElementById('swe-target-file').value.trim();
+      const box = document.getElementById('swe-result-box');
+      const cpr = lastSynthesizedPR?.contextual_pr || {};
+      const patchDiff = lastSynthesizedPR?.patch?.git_diff || '';
+      try {
+        const res = await fetch('/api/v1/pentest/publish-pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repo: repo,
+            pr_title: cpr.pr_title || `fix(security): remediate ${targetFile}`,
+            pr_body_markdown: cpr.pr_body_markdown || patchDiff,
+            patched_files: { [targetFile]: patchDiff || '# Patched by Prometheus v2.5\n' }
+          })
+        });
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        showToast(data.published ? `✓ GitHub PR #${data.pr_number} opened!` : `PR Status: ${data.status}`);
+      } catch (err) {
+        box.textContent = `Error: ${err.message}`;
+        showToast('GitHub PR publish failed', 'error');
+      }
+    }
+
+    async function mintOOBCanaryUI() {
+      const ep = document.getElementById('oob-target-endpoint').value.trim() || '/api/v1/webhooks/preview';
+      const box = document.getElementById('oob-result-box');
+      try {
+        const res = await fetch('/api/v1/oob/mint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_endpoint: ep, vector: 'SSRF' })
+        });
+        const data = await res.json();
+        lastMintedCanaryId = data.canary_id;
+        box.textContent = JSON.stringify(data, null, 2);
+        showToast(`✓ Minted OOB Canary: ${data.canary_id}`);
+      } catch (err) {
+        box.textContent = `Error: ${err.message}`;
+        showToast('Failed to mint OOB canary', 'error');
+      }
+    }
+
+    async function checkOOBCanaryStatusUI() {
+      if (!lastMintedCanaryId) {
+        await mintOOBCanaryUI();
+      }
+      const box = document.getElementById('oob-result-box');
+      try {
+        const res = await fetch(`/api/v1/oob/${encodeURIComponent(lastMintedCanaryId)}/status`);
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        showToast(`OOB Callback Received: ${data.oob_callback_received}`);
+      } catch (err) {
+        box.textContent = `Error: ${err.message}`;
+        showToast('Failed to check OOB canary status', 'error');
+      }
     }
 
     function setASIPreset(mode) {
