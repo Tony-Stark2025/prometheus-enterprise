@@ -987,7 +987,12 @@ async def execute_immunology_scan(req: ImmunologyScanRequest):
     """
     from prometheus.pentest.immunology import ContinuousImmunologyEngine
 
-    target_dir = req.target_dir if os.path.isdir(req.target_dir) else os.getcwd()
+    if req.target_dir and req.target_dir != "." and not os.path.isdir(req.target_dir):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Target directory '{req.target_dir}' does not exist on the server filesystem. For remote repositories, provide a valid mounted directory or clone target.",
+        )
+    target_dir = req.target_dir if (req.target_dir and os.path.isdir(req.target_dir)) else os.getcwd()
     engine = ContinuousImmunologyEngine()
     return await engine.run_immunology_sweep(
         target_dir=target_dir,
@@ -1043,10 +1048,12 @@ async def execute_contextual_swe_patch(req: SWEPatchRequest):
         proof=proof,
         target_file=req.target_file,
     )
+    patched_code = getattr(swe_agent, "last_patched_code", None) or source_code
     return {
         "status": "PATCH_SYNTHESIZED",
         "patch": patch_res.model_dump(),
         "contextual_pr": contextual_pr.model_dump(),
+        "patched_code": patched_code,
     }
 
 
@@ -1091,6 +1098,9 @@ async def mint_oob_canary_endpoint(req: MintOOBCanaryRequest, request: Request):
     from prometheus.pentest.oob_listener import oob_canary_registry
 
     base_url = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto") or request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto:
+        base_url = re.sub(r"^https?://", f"{forwarded_proto}://", base_url)
     reg = oob_canary_registry.mint_canary(
         target_endpoint=req.target_endpoint,
         vector=req.vector,

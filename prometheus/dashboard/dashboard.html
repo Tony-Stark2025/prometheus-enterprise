@@ -1355,6 +1355,7 @@
       const box = document.getElementById('swe-result-box');
       const cpr = lastSynthesizedPR?.contextual_pr || {};
       const patchDiff = lastSynthesizedPR?.patch?.git_diff || '';
+      const patchedCode = lastSynthesizedPR?.patched_code || lastSynthesizedPR?.contextual_pr?.patched_code || patchDiff || '# Patched by Prometheus v2.5\n';
       try {
         const res = await fetch('/api/v1/pentest/publish-pr', {
           method: 'POST',
@@ -1363,7 +1364,7 @@
             repo: repo,
             pr_title: cpr.pr_title || `fix(security): remediate ${targetFile}`,
             pr_body_markdown: cpr.pr_body_markdown || patchDiff,
-            patched_files: { [targetFile]: patchDiff || '# Patched by Prometheus v2.5\n' }
+            patched_files: { [targetFile]: patchedCode }
           })
         });
         const data = await res.json();

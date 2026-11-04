@@ -289,20 +289,26 @@ class OWASPAgenticEngine:
 
     def _seed_default_servers(self) -> None:
         now_iso = datetime.now(timezone.utc).isoformat()
-        pin = hashlib.sha256(b"prometheus-mcp-server:v2.0.0:scan_api_security,mint_capability_token,request_action_permit,verify_action_permit").hexdigest()
+        default_tools = [
+            "scan_api_security",
+            "mint_capability_token",
+            "request_action_permit",
+            "verify_action_permit",
+            "inspect_agentic_payload",
+            "prometheus_verify_exposure",
+            "prometheus_immunology_check",
+            "prometheus_synthesize_patch",
+            "prometheus_generate_poc",
+            "prometheus_publish_pr",
+        ]
+        pin = hashlib.sha256(f"prometheus-mcp-server:v2.5.0:{','.join(default_tools)}".encode()).hexdigest()
         default_srv = RegisteredMCPServer(
             server_id="prometheus-local-mcp",
             tenant_id="default_enterprise",
             name="Prometheus Core Security & Hypervisor MCP",
             endpoint_url="internal://prometheus-mcp",
             transport="internal",
-            allowed_tools=[
-                "scan_api_security",
-                "mint_capability_token",
-                "request_action_permit",
-                "verify_action_permit",
-                "inspect_agentic_payload",
-            ],
+            allowed_tools=default_tools,
             schema_pin_sha256=pin,
             trust_tier="verified",
             created_at=now_iso,
@@ -311,9 +317,13 @@ class OWASPAgenticEngine:
             cur = conn.cursor()
             cur.execute(
                 """
-                INSERT OR IGNORE INTO mcp_gateway_servers
+                INSERT INTO mcp_gateway_servers
                 (server_id, tenant_id, name, endpoint_url, transport, allowed_tools, schema_pin_sha256, trust_tier, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(server_id) DO UPDATE SET
+                    allowed_tools=excluded.allowed_tools,
+                    schema_pin_sha256=excluded.schema_pin_sha256,
+                    trust_tier=excluded.trust_tier
                 """,
                 (
                     default_srv.server_id,

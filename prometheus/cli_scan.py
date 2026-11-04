@@ -73,9 +73,10 @@ async def run_scan(
     alpha_tenant_id: str = "org-alpha-victim-001",
     beta_tenant_id: str = "org-beta-attacker-002",
     publish_pr_repo: Optional[str] = None,
+    max_sla_seconds: float = 85.0,
 ) -> int:
     try:
-        async with asyncio.timeout(80.0):
+        async with asyncio.timeout(max_sla_seconds):
             return await _run_scan_internal(
                 target_url=target_url,
                 spec_data=spec_data,
@@ -96,9 +97,10 @@ async def run_scan(
                 alpha_tenant_id=alpha_tenant_id,
                 beta_tenant_id=beta_tenant_id,
                 publish_pr_repo=publish_pr_repo,
+                max_sla_seconds=max_sla_seconds,
             )
     except TimeoutError:
-        print("\n[-] CI/CD SLA Violation: Scan exceeded 80.0s global timeout threshold.")
+        print(f"\n[-] CI/CD SLA Violation: Scan exceeded {max_sla_seconds:.1f}s global timeout threshold.")
         return 1
 
 
@@ -122,6 +124,7 @@ async def _run_scan_internal(
     alpha_tenant_id: str = "org-alpha-victim-001",
     beta_tenant_id: str = "org-beta-attacker-002",
     publish_pr_repo: Optional[str] = None,
+    max_sla_seconds: float = 85.0,
 ) -> int:
     start_total_time = time.perf_counter()
 
@@ -202,7 +205,7 @@ async def _run_scan_internal(
 
     # Dynamic turn budgeting based on endpoint count and SLA remaining budget
     elapsed_so_far = time.perf_counter() - start_total_time
-    remaining_sla_s = max(10.0, 80.0 - elapsed_so_far)
+    remaining_sla_s = max(10.0, max_sla_seconds - elapsed_so_far)
     time_budget_turns = int(remaining_sla_s / 1.5)
     endpoint_budget_turns = max(8, len(endpoints) * 2)
     dynamic_turns = max(5, min(endpoint_budget_turns, time_budget_turns, 50))
@@ -290,11 +293,34 @@ async def _run_scan_internal(
         # PR Reporter Markdown
         markdown_reports: List[str] = []
         for idx, proof in enumerate(confirmed_exploits):
-            matching_patch = (
-                synthesized_patches[idx]
-                if idx < len(synthesized_patches) and synthesized_patches[idx].verification_status == "VERIFIED_FIX"
-                else next((p for p in synthesized_patches if p.verification_status == "VERIFIED_FIX"), None)
-            )
+            proof_vec = proof.vector.value if hasattr(proof.vector, "value") else str(proof.vector)
+            matching_patch = None
+
+            # 1. Match by exact endpoint
+            for p in synthesized_patches:
+                if p.verification_status == "VERIFIED_FIX" and getattr(p, "target_endpoint", None) == proof.target_endpoint:
+                    matching_patch = p
+                    break
+
+            # 2. Match by endpoint occurring in patch diff or matching vector
+            if not matching_patch:
+                for p in synthesized_patches:
+                    if p.verification_status == "VERIFIED_FIX":
+                        if proof.target_endpoint in p.git_diff:
+                            matching_patch = p
+                            break
+                        if getattr(p, "vector", None) and getattr(p, "vector") == proof_vec:
+                            matching_patch = p
+                            break
+
+            # 3. Positional fallback ONLY if vectors align
+            if not matching_patch and idx < len(synthesized_patches):
+                candidate = synthesized_patches[idx]
+                if candidate.verification_status == "VERIFIED_FIX":
+                    c_vec = getattr(candidate, "vector", None)
+                    if not c_vec or c_vec == proof_vec:
+                        matching_patch = candidate
+
             comment_md = PRReporter.format_github_pr_comment(proof, matching_patch, redact_tokens=True)
             markdown_reports.append(comment_md)
 
@@ -637,9 +663,19 @@ def main() -> None:
         import shlex
         import subprocess
         import signal
+        import shutil
 
         cmd_tokens = shlex.split(args.app_cmd, posix=(sys.platform != "win32"))
-        app_proc = subprocess.Popen(cmd_tokens, shell=False, start_new_session=(sys.platform != "win32"))
+        if cmd_tokens:
+            cmd_tokens[0] = shutil.which(cmd_tokens[0]) or cmd_tokens[0]
+        app_cwd = os.path.abspath(args.target_dir) if (args.target_dir and os.path.isdir(args.target_dir)) else None
+
+        app_proc = subprocess.Popen(
+            cmd_tokens,
+            cwd=app_cwd,
+            shell=(sys.platform == "win32"),
+            start_new_session=(sys.platform != "win32"),
+        )
 
         def _cleanup_handler(signum, frame):
             if app_proc:
@@ -651,23 +687,28 @@ def main() -> None:
         if hasattr(signal, "SIGTERM"):
             signal.signal(signal.SIGTERM, _cleanup_handler)
 
-        # Wait up to 15 seconds for target URL readiness
+        # Wait up to 15 seconds for target URL readiness across multi-path health checks
         ready = False
+        health_paths = ["/health", "/api/health", "/api/v1/health", "/"]
         for _ in range(30):
             if app_proc.poll() is not None:
                 print(f"[-] Preview application exited prematurely with code {app_proc.poll()}.")
                 break
-            try:
-                r = httpx.get(f"{args.target_url.rstrip('/')}/health", timeout=0.5, trust_env=False)
-                if r.status_code in (200, 404):
-                    ready = True
-                    break
-            except Exception:
-                time.sleep(0.5)
+            for hp in health_paths:
+                try:
+                    r = httpx.get(f"{args.target_url.rstrip('/')}{hp}", timeout=0.5, trust_env=False)
+                    if r.status_code < 500:
+                        ready = True
+                        break
+                except Exception:
+                    pass
+            if ready:
+                break
+            time.sleep(0.5)
         if ready:
             print("[+] Target application is ready for scanning.")
         else:
-            print("[!] Warning: Target application did not respond to /health probe; proceeding anyway.")
+            print("[!] Warning: Target application did not respond to readiness probes; proceeding anyway.")
 
     try:
         spec_dict: Dict[str, Any] = {}
@@ -731,6 +772,7 @@ def main() -> None:
                     alpha_tenant_id=alpha_tenant_id,
                     beta_tenant_id=beta_tenant_id,
                     publish_pr_repo=args.publish_pr,
+                    max_sla_seconds=remaining_budget,
                 ),
                 timeout=remaining_budget,
             )
