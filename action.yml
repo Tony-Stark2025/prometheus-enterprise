@@ -27,6 +27,16 @@ inputs:
   jwt-secret:
     description: "JWT signing secret for dual-tenant token generation (optional)"
     required: false
+  target-dir:
+    description: "Local repository directory for Glass-Box route extraction, AST reachability, and Contextual SWE repair"
+    required: false
+  immunology:
+    description: "Set to 'true' to run Event-Driven Continuous Immunology sweep (THN + OSV.dev + AST Call-Graph)"
+    required: false
+    default: "false"
+  publish-pr:
+    description: "Optional GitHub repository ('owner/repo') to automatically open a remediation Pull Request"
+    required: false
 
 outputs:
   exploits-count:
@@ -63,6 +73,10 @@ runs:
         INPUT_APP_CMD: ${{ inputs.app-cmd }}
         INPUT_FAIL_ON_EXPLOIT: ${{ inputs.fail-on-exploit }}
         INPUT_JWT_SECRET: ${{ inputs.jwt-secret }}
+        INPUT_TARGET_DIR: ${{ inputs.target-dir }}
+        INPUT_IMMUNOLOGY: ${{ inputs.immunology }}
+        INPUT_PUBLISH_PR: ${{ inputs.publish-pr }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         ARGS=(
           "--target-url" "$INPUT_TARGET_URL"
@@ -70,12 +84,24 @@ runs:
           "--output-diff" "prometheus-patch.diff"
         )
 
-        if [ -n "$INPUT_SPEC_PATH" ]; then
+        if [ "$INPUT_IMMUNOLOGY" = "true" ]; then
+          ARGS+=("--immunology")
+        elif [ -n "$INPUT_SPEC_PATH" ]; then
           ARGS+=("--spec" "$INPUT_SPEC_PATH")
         elif [ -n "$INPUT_SPEC_URL" ]; then
           ARGS+=("--spec-url" "$INPUT_SPEC_URL")
+        elif [ -n "$INPUT_TARGET_DIR" ]; then
+          ARGS+=("--target-dir" "$INPUT_TARGET_DIR")
         else
           ARGS+=("--demo")
+        fi
+
+        if [ -n "$INPUT_TARGET_DIR" ]; then
+          ARGS+=("--target-dir" "$INPUT_TARGET_DIR")
+        fi
+
+        if [ -n "$INPUT_PUBLISH_PR" ]; then
+          ARGS+=("--publish-pr" "$INPUT_PUBLISH_PR")
         fi
 
         if [ -n "$INPUT_APP_CMD" ]; then

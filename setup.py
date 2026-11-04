@@ -2,17 +2,23 @@ from setuptools import setup, find_packages
 
 setup(
     name="prometheus",
-    version="1.1.0",
-    description="Autonomous API Penetration Testing & Runtime Capability Hypervisor",
+    version="2.5.0",
+    description="Autonomous API Penetration Testing, Continuous Immunology & Contextual SWE Repair Platform",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
-        "google-genai>=0.1.1",
-        "google-cloud-aiplatform>=1.70.0",
-        "fastapi>=0.110.0",
-        "pydantic>=2.6.0",
-        "pydantic-settings>=2.2.0",
+        "google-genai>=1.0.0",
+        "google-cloud-aiplatform>=1.133.0",
+        "fastapi>=0.115.6",
+        "pydantic>=2.10.3",
+        "pydantic-settings>=2.6.1",
         "aiosqlite>=0.20.0",
-        "httpx>=0.27.0",
+        "httpx>=0.28.1",
     ],
+    entry_points={
+        "console_scripts": [
+            "prometheus-scan=prometheus.cli_scan:main",
+        ],
+    },
 )
+

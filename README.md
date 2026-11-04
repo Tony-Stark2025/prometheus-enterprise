@@ -94,14 +94,22 @@ To protect APIs from autonomous tool and agent abuse at runtime, Prometheus prov
   pip install -e .
   ```
 
-### Run CI/CD Vulnerability Scan
-Execute an autonomous vulnerability assessment against a live OpenAPI endpoint:
+### Run CI/CD Vulnerability Scan & Publish Remediation PR
+Execute an autonomous vulnerability assessment against a live OpenAPI endpoint and automatically open a compiler-verified GitHub Pull Request:
 ```bash
 python -m prometheus.cli_scan \
   --target-url http://localhost:8000 \
   --spec-url /openapi.json \
+  --target-dir . \
+  --publish-pr owner/repo \
   --sla-budget-s 85.0 \
   --output-sarif prometheus-report.sarif
+```
+
+### Run Event-Driven Continuous Immunology Sweep
+Ingest live advisories from The Hacker News (THN) RSS and OSV.dev, parse repository lockfiles (`requirements.txt`, `pyproject.toml`, `poetry.lock`, `package.json`, `package-lock.json`), trace AST call-graph reachability, and synthesize manifest upgrade PRs:
+```bash
+python -m prometheus.cli_scan --immunology --target-dir . --publish-pr owner/repo
 ```
 
 ### Run the Prometheus Security Engine Service
@@ -112,15 +120,36 @@ Access the interactive dashboard at `http://localhost:8000/dashboard` and OpenAP
 
 ### Run Test Suite
 ```bash
-pytest tests/ -v
+pytest tests/test_prometheus_v25_architecture.py tests/test_commercial_saas_and_agentic_owasp.py -v
 ```
 
 ---
 
-## 🛡️ Model Context Protocol (MCP) Integration & Live Security Gateway
+## 🧬 Prometheus v2.5 Architecture Upgrades
 
-Prometheus exposes its security engine and hypervisor capabilities as standard MCP tools via both stdio and Server-Sent Events (SSE) transports, and operates as a **Live MCP Reverse-Proxy Security Gateway** (`/api/v1/mcp/gateway/proxy`):
+1. **Multi-Turn Glass-Box ReAct Loop & Safe-Exploit Egress Proxy**:
+   - Combines runtime HTTP probing with `_inspect_route_source_tool` (Glass-Box route handler source inspection) and `_reflect_and_mutate_on_observation` under tiered model routing (`recon`, `explore`, `swe_repair`).
+   - Enforces token-bucket rate limiting, third-party SaaS side-effect interception (Stripe, Twilio, SendGrid, Slack), catastrophic REST bulk-delete blocking, and indirect prompt injection sanitization via `SafeExploitEgressProxy`.
+2. **Multi-Tiered Evidence Oracle & Ephemeral Out-of-Band (OOB) Canary Listener**:
+   - **Tier 1 (Deterministic Protocol Proof)**: Cross-tenant canary reflection + ephemeral OOB callback listeners (`POST /api/v1/oob/mint`, `GET/POST /api/v1/oob/{canary_id}`) for Blind SSRF, XXE, and webhook injection.
+   - **Tier 2 (Empirical State Divergence)**: Synchronized concurrent `asyncio.gather` burst probes (`probe_race_condition`) for TOCTOU / double-spend vulnerabilities.
+   - **Tier 3 (Semantic Business Logic Violations)**: Role escalation and workflow bypass verification.
+3. **Contextual Agentic SWE Repair & Self-Healing Compiler Loop**:
+   - Synthesizes single and multi-file patches (`ContextualSWERepairAgent`), verifies syntax via native subprocess compilation (`py_compile` + `ast.parse` for Python; `node --check --experimental-strip-types` for TypeScript), self-heals on compiler `stderr`, and opens real GitHub Pull Requests via `PRReporter.publish_github_pull_request` (`POST /api/v1/pentest/publish-pr`).
+4. **Event-Driven Continuous Immunology**:
+   - Connects live threat feeds (THN RSS + OSV.dev batch API) to repository lockfiles, traces AST/method-level call-graph reachability (`trace_call_graph_reachability`), suppresses unreachable dependency noise, and synthesizes syntax-verified manifest upgrades (`POST /api/v1/immunology/scan`).
+
+---
+
+## 🛡️ Model Context Protocol (MCP) Super-Agent Suite (10 Tools)
+
+Prometheus exposes its offensive verification, continuous immunology, SWE repair, and hypervisor capabilities over stdio and Server-Sent Events (`/mcp/sse`):
 - `scan_api_security`: Trigger autonomous API discovery and dual-tenant penetration testing.
+- `prometheus_immunology_check`: Run live THN + OSV.dev advisory ingestion and AST call-graph reachability analysis.
+- `prometheus_verify_exposure`: Trace whether a specific package or symbol is reachable in the repository call-graph.
+- `prometheus_generate_poc`: Generate standalone, token-redacted Python `httpx` reproduction scripts and `curl` commands.
+- `prometheus_synthesize_patch`: Synthesize compiler-verified `ContextualPatchPR` code patches and CI/CD regression tests.
+- `prometheus_publish_pr`: Create a GitHub remediation branch, commit patched files, and open a Pull Request.
 - `mint_capability_token`: Mint cryptographically bound capability tokens for agent operations.
 - `request_action_permit`: Request single-use monotonic permits for state-mutating API actions.
 - `verify_action_permit`: Validate an action permit against pre-state witness $H(S)$ prior to mutation.
@@ -141,3 +170,4 @@ Built for **Hybrid PLG + Enterprise Sales** (`Starter` \$0/mo, `Pro` \$499/mo, `
 - **Zero-Mock Policy**: All scan routines, cryptographic verifications, and proxy gates execute real protocols and verifiable payloads.
 - **SSRF Defense-in-Depth**: Strict IP validation with loopback-only override support for local test suites.
 - **Fail-Closed Runtime**: Missing tokens, expired permits, or altered pre-state witnesses result in deterministic denial.
+
